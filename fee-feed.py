@@ -1,21 +1,56 @@
-import random
 import curses
-import bisect
+from re import U
 import time
 from enum import Enum
+import requests
+import time
+from itertools import count
 
 ModeNames = Enum('Modes', 'BASE_FEE PRIORITY_FEE')
 mode_keys = [ord('1'), ord('2')]
 
-class Block:
-    # Relevant block data.
-    def __init__(self, data):
-        self.basefee
-        self.fees = self.Fees()
+# Which blocks to include
 
-    class Fees:
-        def __init__(self):
-            pass
+node = "http://127.0.0.1:8545"
+block_call_ids = count()
+
+
+def parse_block(block, mode):
+    # Filters a block to retrieve only the relevant data
+    # for that mode.
+    single_block = {}
+    for param in mode.param_list:
+        single_block[param] = int(block[param], 16)
+    return single_block
+
+
+def get_blocks(blocks, mode):
+    # Calls a node and asks for blocks in chunks.
+    batch = [
+        {
+            "jsonrpc": "2.0",
+            "id": next(block_call_ids),
+            "method": "eth_getBlockByNumber",
+            "params": [f"{block}", True],
+        }
+        for block in blocks
+    ]
+    responses = requests.post(node, json=batch).json()
+
+    return [parse_block(res["result"], mode) for res in responses]
+
+def get_data_batches(mode):
+    # Organises desired data into groups for batch calling.
+    blocks = []
+    for chunk in range(mode.start_block, mode.end_block, 
+        mode.block_chunks):
+        block_list = get_blocks(
+            range(chunk, 
+                min(mode.end_block + 1, chunk + mode.block_chunks)),
+            mode)
+        [blocks.append(block) for block in block_list]
+    return blocks
+
 
 def get_mode_from_key(keypress):
     mode = None
@@ -25,6 +60,7 @@ def get_mode_from_key(keypress):
         mode = ModeNames.PRIORITY_FEE
     return mode
 
+
 def define_axes(mode):
     price_str = 'nanoether per gas (Gwei per gas)'
     block_str = 'block number'
@@ -32,6 +68,7 @@ def define_axes(mode):
         return block_str, price_str, 'base fee'
     elif mode == ModeNames.PRIORITY_FEE:
         return block_str, price_str, 'priority fee'
+
 
 class Mode:
     # The graph context (data, window display)
@@ -43,7 +80,32 @@ class Mode:
         self.y_name = ax[1]
         self.graph_name = ax[2]
         self.data = None
+        self.graph_points_x = []
+        self.graph_points_y = []
+        self.coords_x = []
+        self.coords_y = []
+        self.start_block = None
+        self.end_block = None
+        self.block_chunks = None
 
+    def define_chunks(self):
+        if self.current == ModeNames.BASE_FEE:
+            start = 5072606
+            # start = 5062605  # Goerli fork block. 
+            self.start_block = start # a goerli block.
+            self.end_block = start + 1000
+            self.block_chunks = 100
+        return self
+
+    def define_parse_params(self):
+        if self.current == ModeNames.BASE_FEE:
+             self.param_list = ['number','baseFeePerGas']
+        
+
+    def get_data(self):
+        self.define_chunks()
+        self.define_parse_params()
+        self.data = get_data_batches(self)
 
 
 class Keypress:
@@ -110,27 +172,92 @@ def draw_axes(win, pos, mode):
     win.hline(pos.x_axis_base[0], pos.x_axis_base[1], 
         '_', pos.x_axis_width)
     x_name = mode.x_name 
-    win.addstr(pos.x_axis_base[0] + 2, 
+    win.addstr(pos.h - 1, 
         pos.x_axis_base[1] + pos.x_axis_width - len(x_name), mode.x_name)
     # y-axis
     win.vline(pos.y_axis_tip[0], pos.y_axis_tip[1], 
         '|', pos.y_axis_height)
-    win.addstr(pos.y_axis_tip[0] - 2, pos.y_axis_tip[1] - 2, mode.y_name)
+    win.addstr(1, pos.y_axis_tip[1] - 2, mode.y_name)
     # title
     win.addstr(pos.y_axis_tip[0] - 2, 
         pos.w - pos.border - len(mode.graph_name), mode.graph_name)
     return 
 
+def select_points(pos, mode):
+    # From the data chooses points that will be able to fit.
+    number = pos.w - 2 * pos.border
+    return mode.data[:number]
+
+def plot_point(win, mode, index, symbol):
+    # Plots a single point.
+    y = int(mode.coords_y[index])
+    x = mode.coords_x[index]
+    win.addstr(y, x, symbol)
+
+def get_scale(points, mode):
+    # Attaches points to tracking object, gets max vals.
+    for point in points:
+        xval = point[mode.param_list[0]]
+        mode.graph_points_x.append(xval)
+        yval = point[mode.param_list[1]]
+        mode.graph_points_y.append(yval)
+    ymax = max(mode.graph_points_y)
+    xmax = max(mode.graph_points_x)
+    return (ymax, xmax)
+
+def scale_value(val, src, dst):
+    # Scales the point onto the pixels available.
+    # Inverting the scale, because Curses maps yvals top down.
+
+    return (1 - (val - src[0]) / (src[1]-src[0])) * (dst[1]-dst[0]) + dst[0]
+
+def get_coordinates(pos, mode, scale):
+    # Calculates coordinates for each point.
+    (ymax, xmax) = scale
+    y_pix_max = pos.h - pos.border - 1
+    y_pix_min = pos.border + 1 
+    for index in range(len(mode.graph_points_x)):
+        # Space out x values evenly left to right
+        coord = pos.border + 2 + index
+        mode.coords_x.append(coord)
+
+    for point in mode.graph_points_y:
+        # Map the y values to the axis.
+        from_range = (0, ymax)
+        to_range =  (y_pix_min, y_pix_max)
+        coord = scale_value(point, from_range, to_range)
+        mode.coords_y.append(coord)
+
+def draw_points(win, pos, mode):
+    # Takes data, creates scale, fits to window, graphs.
+    points = select_points(pos, mode)
+    scale = get_scale(points, mode)
+    # Add max values to axes.
+    win.addstr(pos.y_axis_tip[0], pos.y_axis_tip[1] - 3, str(scale[0]))
+    win.addstr(pos.h - pos.border + 1, 
+        pos.w - pos.border - len(str(scale[1])), str(scale[1]))
+
+    get_coordinates(pos, mode, scale)
+
+    [
+        plot_point(win, mode, index, '*') 
+        for index in range(len(points))
+    ]
+
 
 def draw_graph(sc, win, mode):
     # Gets positions of elements for the current mode, draws.
     pos = Positions(sc, win)
+
+    draw_points(win, pos, mode)
+
     draw_axes(win, pos, mode)
     return
 
 
-# Perform one draw window cycle.
-def cycle(sc, win, keypress, interval, modes):
+def cycle(sc, win, keypress, interval, modes): 
+    # Perform one draw window cycle.
+
     # Refresh states.
     interval.update()
     keypress.read(win)
@@ -143,15 +270,14 @@ def cycle(sc, win, keypress, interval, modes):
     # Get the index of the active mode, using the index of it's key.
     index_of_active_mode = mode_keys.index(keypress.current_mode)
     # 'modes' is a list of Mode objects that configure a window.
-    active_mode = modes[index_of_active_mode]
+    mode = modes[index_of_active_mode]
 
 
     # Get block data
     if interval.ready_to_call_block:
-        pass # get_block()
-    
-    # Draw graph
-    draw_graph(sc, win, active_mode)
+        mode.get_data()
+        # Draw graph
+        draw_graph(sc, win, mode)
 
     return keypress.active
 
