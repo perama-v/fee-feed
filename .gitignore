@@ -131,3 +131,4 @@ dmypy.json
 # Ignore
 ignore/
 venv-fee-feed/
+.vscode/
