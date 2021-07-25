@@ -142,7 +142,7 @@ def cycle(sc, win, keypress, interval, modes):
     
     # Get the index of the active mode, using the index of it's key.
     index_of_active_mode = mode_keys.index(keypress.current_mode)
-    # modes is a list of Mode objects that configure a window.
+    # 'modes' is a list of Mode objects that configure a window.
     active_mode = modes[index_of_active_mode]
 
 
