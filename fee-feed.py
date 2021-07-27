@@ -275,8 +275,6 @@ def select_points(pos, mode):
 
 def get_min_xy_max_xy(mode):
     # Finds largest x and y vals of all plottable points.
-    if mode.data[0]['x_list'] == []:
-        return (0,0,0,0)
     min_x = min([
         min([0 if x==None else x for x in data_set['x_list']])
         for data_set in mode.data])
@@ -379,6 +377,8 @@ def draw_points(win, pos, mode):
 
 def draw_graph(sc, win, mode):
     # Gets positions of elements for the current mode, draws.
+    if len(mode.data[0]['x_list']) == 0:
+        return
     pos = Positions(sc, win)
 
     draw_points(win, pos, mode)
