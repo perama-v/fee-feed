@@ -17,7 +17,7 @@ mode_params = {
         'graph_title': 'Fees for latest block',
         'x_axis_name': 'Transaction index',
         'y_axis_name': price_string,
-        'block_depth': 1,
+        'oldest_required': 1,
         'block_data': ['gasLimit', 'gasUsed', 'number', 'timestamp',
             'baseFeePerGas'],
         'get_transactions': True,
@@ -44,12 +44,47 @@ mode_params = {
     },
     ModeNames.BASE_FEE: {
         'mode_key': mode_keys[1],
-        'graph_title': 'Recent base fees',
+        'graph_title': 'Recent fees',
         'x_axis_name': 'Block number',
         'y_axis_name': price_string,
-        'block_depth': 100 
+        'oldest_required': 100,
+        'block_stats': ['base_fee','Q4','Q3','Q2','Q1','Q0'
+            'mode_priority'],
+        'transaction_params': ['gasPrice','maxFeePerGas',
+            'maxPriorityFeePerGas'],
+        'sets_to_graph': [
+            {'name': 'Base fee',
+            'symbol': '*',
+            'x': 'block_number',
+            'y': 'base_fee'},
+            {'name': 'Max priority fee',
+            'symbol': '4',
+            'x': 'block_number',
+            'y': 'Q4'},
+            {'name': 'Upper quartile priority fee',
+            'symbol': '3',
+            'x': 'block_number',
+            'y': 'Q3'},
+            {'name': 'Median priority fee',
+            'symbol': '2',
+            'x': 'block_number',
+            'y': 'Q2'},
+            {'name': 'Lower quartile priority',
+            'symbol': '1',
+            'x': 'block_number',
+            'y': 'Q1'},
+            {'name': 'Minimum priority',
+            'symbol': '0',
+            'x': 'block_number',
+            'y': 'Q0'},
+            {'name': 'Mode priority',
+            'symbol': '.',
+            'x': 'block_number',
+            'y': 'mode_priority'}
+        ]
     }
 }
+
 # Maintains the sequence of JSON-RPC API calls.
 block_call_ids = count()
 
@@ -60,13 +95,9 @@ def hex_to_int(hex_string):
     else:
         return None
 
-def parse_block(block, mode):
-    # Retrieves only the relevant data for a mode. 
-    # If a desired field is absent, key will have 'None' value.
-    single_block = {
-        key: hex_to_int(block.get(key))
-        for key in mode.params['block_data'] 
-    }
+
+def get_transactions_from_block(block, mode):
+    # Uses parameter list to get 
     transactions = [
         {
             key: hex_to_int(block_tx.get(key)) 
@@ -75,11 +106,56 @@ def parse_block(block, mode):
         for block_tx in block['transactions']
         if mode.params['get_transactions']
     ]
+    return transactions
+
+
+def parse_block(block, mode):
+    # Retrieves only the relevant data for a mode. 
+    # If a desired field is absent, key will have 'None' value.
+    single_block = {
+        key: hex_to_int(block.get(key))
+        for key in mode.params['block_data'] 
+    }
+    transactions = get_transactions_from_block(block, mode)
     single_block['transactions'] = transactions
     return single_block
 
+def infer_priority_fee(transaction, base_fee):
+    # Get priority fee equivalent for all tx types, even legacy.
+    if 'priorityFeePerGas' not in transaction.keys():
+        return int(transaction['gasPrice'], 16) - base_fee
 
-def get_blocks(blocks, mode):
+    return int(transaction['priorityFeePerGas'], 16)
+
+
+def block_analysis(block):
+    # Returns block with interesting properties attached.
+    result = {}
+    base_fee = 0
+    if 'baseFeePerGas' in block.keys():
+        base_fee = int(block['baseFeePerGas'], 16)
+    priority_fees = sorted([
+        infer_priority_fee(transaction, base_fee)
+        for transaction in block['transactions']
+    ])
+    result['base_fee'] = base_fee
+    n = len(priority_fees)
+    result['Q4'] = priority_fees[-1]
+    result['Q3'] = priority_fees[n*3//4]
+    result['Q2'] = priority_fees[n//2]
+    result['Q1'] = priority_fees[n*1//4]
+    result['Q0'] = priority_fees[0]
+
+    # TODO consider getting some measure of max fee. 
+        # Legacy: equals gasPrice.
+        # New: maxFeePerGas. 
+
+    # Most common priority fee value.
+    result['mode'] = max(set(priority_fees), key=n)
+    return
+
+
+def get_blocks(blocks, mode=None):
     # Calls a node and asks for blocks in chunks.
     batch = [
         {
@@ -91,12 +167,37 @@ def get_blocks(blocks, mode):
         for block in blocks
     ]
     responses = requests.post(node, json=batch).json()
-    return [parse_block(res["result"], mode) for res in responses]
+
+    if mode is None:
+        return [
+            block_analysis(res["result"]) 
+            for res in responses
+        ]
+    else:
+        return [
+            parse_block(res["result"], mode) 
+            for res in responses
+            ]
+
+def new_block_exists(known_block):
+    # This function asks node for the current block
+    # Returns True if higher than known block.
+    get_num = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_blockNumber",
+        "params": [],
+        }
+    res = requests.post(node, json=get_num).json()
+    current = int(res["result"], 16)
+    if current > known_block:
+        return True
+    return False
 
 
 def get_data_batches(mode):
     # Organises desired data into groups for batch calling.
-    blocks = []
+    blocks = []        
     for chunk in range(mode.start_block, mode.end_block, 
         mode.block_chunks):
         block_list = get_blocks(
@@ -114,23 +215,69 @@ def get_mode_from_key(keypress):
         if keypress == mode_params[mode_name]['mode_key']:
             return mode_name
 
-    
+
+def get_latest_only(modes):
+    # Returns the latest block for quick displays
+    block = get_blocks(['latest'], modes[0])
+    block_num = block[0]['number']
+    return block, block_num
+
+
+def most_distant_needed(modes):
+    # Finds the number of recent blocks needed at all times.
+    return max([mode.params['oldest_required'] for mode in modes])
+
+
 class BlockDataManager:
     # Holds data. Modes query the manager for data.
     # Periodically refreshes by calling node.
     def __init__(self, modes):
-        # list of block objects.
-        self.recent_blocks_parsed = []
+
+        # Analysed blocks {str(block_number) : data} for modes to use.
+        self.recent_blocks = {}
         # When initialised, only get one block (for speed)
-        self.latest_block_transactions = get_blocks(
-            ['latest'], modes[0])
+        (block, num) = get_latest_only(modes)
+        self.latest_block_transactions = block
+        self.oldest_block = num  # Oldest for which tx data is held.
+        self.current_block = num  # Newest for which tx data is held.
+        self.range_required = most_distant_needed(modes)
+
+    def get_missing_blocks(self, newest_aware_of):
+        # Maintenance data management.
+        # Assesses if block data needs are met, retrieves if needed.
+        oldest_needed = newest_aware_of + self.range_required
+        needed = range(newest_aware_of, oldest_needed)
+        # Remove outdated blocks.
+        relevant = {
+            block: self.recent_blocks[block]
+            for block in self.recent_blocks
+            if int(block.items()[0]) in needed
+        }
+        # Fetch missing blocks.
+        missing_numbers = [
+            block for block in needed
+            if block not in relevant.keys()
+        ]
+        retrieved = get_blocks(missing_numbers, mode=None)
+        [
+            relevant.update({block['number']: block})
+            for block in retrieved
+        ]
+
+        self.recent_blocks = relevant       
+        # TODO: Handle reorgs.
+        # E.g., Starting from recent, walk the hashes and discard
+        # if not in chain, then refill any missing.
+        self.current_block = newest_aware_of
+
 
     def get_all_data(self, modes):
+        # Batch call for first large request.
         # Retrieves the data required for each mode.
         # Modes specify the raw data they will need.
         # API is called so that any mode will have the data ready.
-        self.latest_block_transactions = get_blocks(
-            ['latest'], modes[0])
+        (self.latest_block_transactions, 
+            self.current_block) = get_latest_only(modes) 
         # TODO Call node to get data and save as cache.
         # self.recent_base_fees = xyz
         # self.recent_priority/maxfees = xyz
@@ -155,13 +302,16 @@ class Mode:
         # Get unique mode features from global paramater config dict.
         self.params = mode_params[self.name]
         self.data = None
+        self.current_block = None
 
-    def prepare_data(self, data):
+    def prepare_data(self, data_manager):
         # Accepts data, uses self.params to select and refine.
         # Saves a list of sets of points to be graphed, with 
         self.data = [
-            format_set(data, format)
+            format_set(data_manager.latest_block_transactions, 
+                format)
             for format in self.params['sets_to_graph']]
+        self.current_block = data_manager.current_block
 
     def define_chunks(self):
         if self.name == ModeNames.BASE_FEE:
@@ -203,17 +353,31 @@ class Interval:
     # Determines if it is the right time to get data.
     def __init__(self):
         self.sec_since_call = 0
+        delay_ms = 200  # Delay after first window display.
+        self.time_msec_after_start = int(time.time()*1000) + delay_ms
         self.time = int(time.time())
         self.ready_to_call_block = False
+        self.ready_for_startup_data = False
+        self.startup_data_done = False
     
     def reset(self):
         self.time = int(time.time())
+
+    def startup_data_retrieved(self):
+        self.ready_for_startup_data = False
+        self.startup_data_done = True
     
-    def update(self):
+    def update(self, current_block_num):
         self.sec_since_call =  int(time.time()) - self.time
-        if self.sec_since_call >= 6:
-            self.ready_to_call_block = True
-            self.reset()
+
+        if not self.startup_data_done:
+            if int(time.time()*1000) > self.time_msec_after_start:
+                self.ready_for_startup_data = True
+
+        if self.sec_since_call >= 2:
+            if new_block_exists(current_block_num):
+                self.ready_to_call_block = True
+                self.reset()
         else:
             self.ready_to_call_block = False
 
@@ -254,11 +418,9 @@ def draw_axes(win, pos, mode):
     title = mode.params['graph_title']
     win.addstr(pos.y_axis_tip[0] - 2,
         pos.w - pos.border - len(title) + 1, title)
-    '''TODO. Add current block for context.
-    block_str = f"Current block: {mode.?data['block_number']}"
-    win.addstr(pos.y_axis_tip[0] - 1,
-        #pos.w - pos.border - len(block_str) + 1, block_str)
-    '''
+    block_str = f"Current block: {mode.current_block}"
+    win.addstr(1, pos.w - pos.border - len(block_str) + 1, block_str)
+
 
 def select_points(pos, mode):
     # Returns a tuple representing the first point to exclude,
@@ -358,7 +520,7 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
         x_range = min_xy_max_xy[2] - min_xy_max_xy[0]
         half_val = min_xy_max_xy[2] * skip // x_range    
         hidden_str = f'|| Middle {points_to_skip[1]} points hidden.'
-        win.addstr(2, x_dist, hidden_str)
+        win.addstr(3, x_dist, hidden_str)
     else:
         half_val = min_xy_max_xy[2] // 2
     win.addstr(pos.h - pos.border + 1, x_dist - 1, str(half_val))
@@ -377,7 +539,7 @@ def draw_points(win, pos, mode):
 
 def draw_graph(sc, win, mode):
     # Gets positions of elements for the current mode, draws.
-    if len(mode.data[0]['x_list']) == 0:
+    if len(mode.data[0]['y_list']) == 0:
         return
     pos = Positions(sc, win)
 
@@ -399,15 +561,21 @@ def detect_keypress(win, keypress):
 
 def cycle(sc, win, keypress, interval, modes, data_manager): 
     # Perform one draw window cycle.
-    interval.update()
+    interval.update(data_manager.current_block)
     detect_keypress(win, keypress)
     # Get mode define by keyboard number input.
     mode = modes[mode_keys.index(keypress.current_mode)]
     if interval.ready_to_call_block:
+        # If a new block has been observed.
         data_manager.get_all_data(modes)
-        modes[0].prepare_data(data_manager.latest_block_transactions)
+        modes[0].prepare_data(data_manager)
         win.erase()
-    #if interval.ready_to_call_block:
+    if interval.ready_for_startup_data:
+        # An x millisecond delay is applied after first window display
+        # which allows the interface to start. Otherwise 
+        # main data collection would begin before display is shown.
+        data_manager.get_missing_blocks(data_manager.current_block)
+        interval.startup_data_retrieved()
     draw_graph(sc, win, mode)
     return keypress.active
 
@@ -424,12 +592,9 @@ def main(sc):
     interval = Interval()
     modes = [Mode(key) for key in mode_keys]
     data_manager = BlockDataManager(modes)
-    
-    # Start display for first mode for snappy beginning.
-    modes[0].prepare_data(data_manager.latest_block_transactions)
-    draw_graph(sc, win, modes[0]) 
-    # Start grabbing data for inactive modes.
-    data_manager.get_all_data(modes)
+
+    # Data for first mode for snappy beginning.
+    modes[0].prepare_data(data_manager)
 
     # Begin main display loop.
     active = True
@@ -441,7 +606,7 @@ def main(sc):
        
     # Close program.
     h, w = sc.getmaxyx()
-    goodbye = 'Bye Bye! Thanks for playing Fee-Feed'
+    goodbye = 'Bye!'
     sc.addstr(h//2, w//2 - len(goodbye)//2, goodbye)
     sc.refresh()
     time.sleep(2)
