@@ -3,7 +3,8 @@ import time
 from enum import Enum
 import requests
 import time
-from itertools import count
+from itertools import count, accumulate
+from bisect import bisect_left
 
 # Change this to the address of your node.
 node = "http://127.0.0.1:8545"
@@ -122,41 +123,66 @@ def parse_block(block, mode):
 
 def infer_priority_fee(transaction, base_fee):
     # Get priority fee equivalent for all tx types, even legacy.
+    # Inferred priority == effective miner fee.
+    inferred_p_f = 0
     if 'priorityFeePerGas' not in transaction.keys():
-        return int(transaction['gasPrice'], 16) - base_fee
-
-    return int(transaction['priorityFeePerGas'], 16)
+        inferred_p_f = int(transaction['gasPrice'], 16) - base_fee
+    else:
+        inferred_p_f = int(transaction['priorityFeePerGas'], 16)
+    transaction['inferred_priority'] = inferred_p_f
+    return transaction
 
 
 def block_analysis(block):
-    # Returns block with interesting properties attached.
+    # Gets information about fee, e.g. base fee and some
+    # gas-based percentiles of effective miner fee.
     result = {}
+    if len(block['transactions']) == 0:
+        return None
+
     base_fee = 0
     if 'baseFeePerGas' in block.keys():
         base_fee = int(block['baseFeePerGas'], 16)
-    priority_fees = sorted([
-        infer_priority_fee(transaction, base_fee)
-        for transaction in block['transactions']
-    ])
     result['base_fee'] = base_fee
-    n = len(priority_fees)
-    result['Q4'] = priority_fees[-1]
-    result['Q3'] = priority_fees[n*3//4]
-    result['Q2'] = priority_fees[n//2]
-    result['Q1'] = priority_fees[n*1//4]
-    result['Q0'] = priority_fees[0]
+    with_inferred = [
+        infer_priority_fee(transaction, base_fee)
+        for transaction in block['transactions']]
 
-    # TODO consider getting some measure of max fee. 
-        # Legacy: equals gasPrice.
-        # New: maxFeePerGas. 
+    # Sort tx list by inferred priority fee:
+    tx_by_fee = sorted(with_inferred,
+        key = lambda tx: tx['inferred_priority'])
+    # Make a list of accumulating gas
 
-    # Most common priority fee value.
-    result['mode'] = max(set(priority_fees), key=n)
-    return
+    gas_limit_vals = [
+        int(tx['gas'], 16)
+        for tx in with_inferred
+    ]
+    gas_clock = list(accumulate(gas_limit_vals))
+    block_gas = int(block['gasUsed'], 16)
+    # Get fee percentiles by gas limit (rather than index).
+    # TODO (maybe - might be slow.) change this to gas used by
+    # calling eth_getTransactionReceipt for each transaction
+    percentiles = {
+        'Q0': 0,
+        'Q1': 25,
+        'Q2': 50,
+        'Q3': 75,
+        'Q4': 100
+    }
+    for name, percentile in percentiles.items():
+        # Use gas_clock for the index of the transaction
+        # once the gas percentile is passed.
+        tx_index = bisect_left(gas_clock, percentile*block_gas/100)
+        fee = tx_by_fee[tx_index]['inferred_priority']
+        result[name] = fee
+
+    result['number'] = int(block['number'], 16)
+    return result
 
 
 def get_blocks(blocks, mode=None):
     # Calls a node and asks for blocks in chunks.
+    
     batch = [
         {
             "jsonrpc": "2.0",
@@ -172,7 +198,7 @@ def get_blocks(blocks, mode=None):
         return [
             block_analysis(res["result"]) 
             for res in responses
-        ]
+            ]
     else:
         return [
             parse_block(res["result"], mode) 
@@ -245,8 +271,9 @@ class BlockDataManager:
     def get_missing_blocks(self, newest_aware_of):
         # Maintenance data management.
         # Assesses if block data needs are met, retrieves if needed.
-        oldest_needed = newest_aware_of + self.range_required
-        needed = range(newest_aware_of, oldest_needed)
+        oldest_needed = newest_aware_of - self.range_required
+        needed = [i for i in range(oldest_needed,
+            newest_aware_of)]
         # Remove outdated blocks.
         relevant = {
             block: self.recent_blocks[block]
@@ -262,6 +289,7 @@ class BlockDataManager:
         [
             relevant.update({block['number']: block})
             for block in retrieved
+            if block is not None
         ]
 
         self.recent_blocks = relevant       
@@ -374,12 +402,12 @@ class Interval:
             if int(time.time()*1000) > self.time_msec_after_start:
                 self.ready_for_startup_data = True
 
-        if self.sec_since_call >= 2:
+        if self.sec_since_call >= 3:
             if new_block_exists(current_block_num):
                 self.ready_to_call_block = True
                 self.reset()
-        else:
-            self.ready_to_call_block = False
+            else:
+                self.ready_to_call_block = False
 
 class Positions:
     # Coordinates of elements, in "(y, x)" where paired.
@@ -518,9 +546,10 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     if points_to_skip[1] > 0:
         skip = points_to_skip[0]
         x_range = min_xy_max_xy[2] - min_xy_max_xy[0]
-        half_val = min_xy_max_xy[2] * skip // x_range    
-        hidden_str = f'|| Middle {points_to_skip[1]} points hidden.'
-        win.addstr(3, x_dist, hidden_str)
+        half_val = min_xy_max_xy[2] * skip // x_range
+        hidden_str1 = f'|...| Tx {skip} to '
+        hidden_str2 = f'{skip + points_to_skip[1]} hidden.'
+        win.addstr(3, x_dist, hidden_str1+hidden_str2)
     else:
         half_val = min_xy_max_xy[2] // 2
     win.addstr(pos.h - pos.border + 1, x_dist - 1, str(half_val))
