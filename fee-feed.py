@@ -59,32 +59,32 @@ mode_params = {
         'sets_to_graph': [            
 
             {'name': 'Q1 priority ',
-            'symbol': '|',
+            'symbol': '▀',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q1'},
             {'name': 'med priority',
-            'symbol': '|',
+            'symbol': '█',
             'x': 'block_number',
             'loc_for_set': 'statistics',
             'y': 'Q2'},
             {'name': 'Q3 priority ',
-            'symbol': '|',
+            'symbol': '▄',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q3'},
             {'name': 'max priority',
-            'symbol': '-',
+            'symbol': '┬',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q4'},            
             {'name': 'min priority',
-            'symbol': '-',
+            'symbol': '┴',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q0'},
             {'name': 'Base fee    ',
-            'symbol': '*',
+            'symbol': '≡',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'base_fee'},
@@ -170,6 +170,7 @@ def block_analysis(block):
     # Get fee percentiles by gas limit (rather than index).
     # TODO (maybe - might be slow.) change this to gas used by
     # calling eth_getTransactionReceipt for each transaction
+    # TODO IQR
     percentiles = {
         'Q0': 0,
         'Q1': 25,
