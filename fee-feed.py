@@ -544,6 +544,7 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
         y_val = str((n-i) * min_xy_max_xy[3] // n // \
             mode.params['y_display_scale'])
         win.addstr(y_height, pos.y_axis_tip[1] - 3, y_val)
+    
     # Move the max axis if the axis is not fully filled.
     filler = max(0, pos.x_axis_width - \
         len(mode.data[0]['x_list']))
@@ -565,7 +566,7 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
         win.addstr(3, x_dist, hidden_str1+hidden_str2)
     else:
         half_val = x_range // 2 + min_x
-    win.addstr(pos.h - pos.border + 1, x_dist - 1, str(half_val))
+    win.addstr(pos.h - pos.border + 1, x_dist, str(half_val))
     # Add x axis minimum.
     win.addstr(pos.x_axis_base[0] + 1, pos.x_axis_base[1] + 1, 
         str(min_x))
