@@ -15,6 +15,7 @@ price_string = 'nanoether per gas (Gwei per gas)'
 mode_params = {
     ModeNames.LATEST_FEES: {
         'mode_key': mode_keys[0],
+        'button' : '1',
         'graph_title': 'Fees for latest block',
         'x_axis_name': 'Transaction index',
         'y_axis_name': price_string,
@@ -46,6 +47,7 @@ mode_params = {
     },
     ModeNames.BASE_FEE: {
         'mode_key': mode_keys[1],
+        'button': '2',
         'graph_title': 'Recent fees',
         'x_axis_name': 'Block number',
         'y_axis_name': price_string,
@@ -62,7 +64,7 @@ mode_params = {
             'x': 'block_number',
             'y': 'Q1'},
             {'name': 'med priority',
-            'symbol': '.',
+            'symbol': '|',
             'x': 'block_number',
             'loc_for_set': 'statistics',
             'y': 'Q2'},
@@ -131,10 +133,10 @@ def infer_priority_fee(transaction, base_fee):
     # Get priority fee equivalent for all tx types, even legacy.
     # Inferred priority == effective miner fee.
     inferred_p_f = 0
-    if 'priorityFeePerGas' not in transaction.keys():
+    if 'maxPriorityFeePerGas' not in transaction.keys():
         inferred_p_f = int(transaction['gasPrice'], 16) - base_fee
     else:
-        inferred_p_f = int(transaction['priorityFeePerGas'], 16)
+        inferred_p_f = int(transaction['maxPriorityFeePerGas'], 16)
     transaction['inferred_priority'] = inferred_p_f
     return transaction
 
@@ -269,14 +271,15 @@ class BlockDataManager:
         # When initialised, only get one block (for speed)
         (block, num) = get_latest_only(modes) 
         # Store for data for first mode to use.
-        loc = modes[0].params['loc_in_manager']
+        first_mode = modes[0]
+        loc = first_mode.params['loc_in_manager']
         self.all_data[loc] = block
         self.oldest_block = num  # Oldest for which tx data is held.
         self.current_block = num  # Newest for which tx data is held.
         self.range_required = most_distant_needed(modes)
-        self.other_modes_ready = False
+        self.modes_available = [first_mode.name]
 
-    def get_missing_blocks(self, newest_aware_of):
+    def get_missing_blocks(self, newest_aware_of, modes):
         # Maintenance data management. Refreshes recent block list.
         # Assesses if block data needs are met, retrieves if needed.
         oldest_needed = newest_aware_of - self.range_required
@@ -308,8 +311,9 @@ class BlockDataManager:
         # E.g., Starting from recent, walk the hashes and discard
         # if not in chain, then refill any missing.
         self.current_block = newest_aware_of
-        self.other_modes_ready = True
-
+        # Make all modes available.
+        self.modes_available = [m.name for m in modes]
+        
 
     def get_first_mode_data(self, modes):
         # Gets data from latest block for fast display.
@@ -329,6 +333,7 @@ def format_set(data, format):
         'set_name':format['name'],'set_symbol':format['symbol'],
         'x_list': x, 'y_list': y} 
         
+
 class Mode:
     # The graph context (data, window display)
     # Local 'mode' is a Mode object that configures a display.
@@ -339,7 +344,6 @@ class Mode:
         # A list of data dicts with x, y, name, symbol.
         self.data = None
         self.current_block = None
-
 
     def prepare_data(self, data_manager):
         # Accepts manager, uses self.params to select and refine.
@@ -367,14 +371,20 @@ class Keypress:
             self.current_mode = self.key
             self.mode_changed = True
 
-    def read(self, win):
+    def read(self, win, data_manager):
         # Reads last key pressed, detects changes.
         self.key = win.getch()
         if self.key == ord('q'):
             self.active = False
 
+        available_mode_keys = [
+            mode_params[m]['mode_key']
+            for m in data_manager.modes_available
+        ]
+        # If valid key
         if self.key in mode_keys:
-            self.modify_mode()
+            if self.key in available_mode_keys:
+                self.modify_mode()
 
 
 class Interval:
@@ -388,7 +398,6 @@ class Interval:
         self.ready_for_startup_data = False
         self.startup_data_done = False
 
-    
     def reset(self):
         self.time = int(time.time())
 
@@ -481,6 +490,7 @@ def get_min_xy_max_xy(mode):
         for data_set in mode.data])
     return (min_x, min_y, max_x, max_y)
 
+
 def scale_value(val, val_small_large, coord_small_large):
     # Scales the point onto the pixels available.
     # (val - src_min) / (src_range) * (dest_range) + dest_min.
@@ -568,21 +578,45 @@ def draw_points(win, pos, mode):
     ]
 
 
-def draw_graph(sc, win, mode):
+def fetch_missing_and_prepare(data_manager, modes):
+    # Investigates what data is missing, retrieves, then prepares.
+    data_manager.get_missing_blocks(
+        data_manager.current_block, modes) 
+    [m.prepare_data(data_manager) for m in modes]
+
+
+def offer_modes(win, pos, mode, data_manager):
+    # Shows the buttons that a user can press to select mode.
+    current_button = mode_params[mode.name]['button']
+   # current = f'Current mode: [{current_button}]. Available: '
+    available = [
+        mode_params[m]['button']
+        for m in data_manager.modes_available
+    ]
+    highlighted = [
+        f'[{m}]' if m == current_button else m
+        for m in available
+    ]
+    mode_str = f'Modes: {" ".join(highlighted)}'
+    #mode_str = current + ' ['.join(available) + '] (press key)'
+    win.addstr(1, pos.w // 2 - len(mode_str), mode_str)
+    a=1
+
+
+def draw_graph(sc, win, mode, data_manager):
     # Gets positions of elements for the current mode, draws.
-    if len(mode.data[0]['y_list']) == 0:
+    if mode.data is None:
         return
     pos = Positions(sc, win)
-
+    offer_modes(win, pos, mode, data_manager)
     draw_points(win, pos, mode)
-
     draw_axes(win, pos, mode)
     return
 
 
-def detect_keypress(win, keypress):
+def detect_keypress(win, keypress, data_manager):
     # Reacts to either window being resized or keyboard activity.
-    keypress.read(win)
+    keypress.read(win, data_manager)
     if keypress.key == curses.KEY_RESIZE:
         win.erase()
     if keypress.mode_changed:
@@ -593,7 +627,7 @@ def detect_keypress(win, keypress):
 def cycle(sc, win, keypress, interval, modes, data_manager): 
     # Perform one draw window cycle.
     interval.update(data_manager.current_block)
-    detect_keypress(win, keypress)
+    detect_keypress(win, keypress, data_manager)
     # Get mode define by keyboard number input.
     mode = modes[mode_keys.index(keypress.current_mode)]
     if interval.ready_to_call_block:
@@ -606,9 +640,11 @@ def cycle(sc, win, keypress, interval, modes, data_manager):
         # An x millisecond delay is applied after first window display
         # which allows the interface to start. Otherwise 
         # main data collection would begin before display is shown.
-        data_manager.get_missing_blocks(data_manager.current_block)
+        fetch_missing_and_prepare(data_manager, modes)
         interval.startup_data_retrieved()
-    draw_graph(sc, win, mode)
+
+    draw_graph(sc, win, mode, data_manager)
+
     return keypress.active
 
 
