@@ -551,20 +551,24 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     x_dist = pos.w - pos.border - len(str(min_xy_max_xy[2])) - filler
     win.addstr(pos.h - pos.border + 1, x_dist + 1, 
         str(min_xy_max_xy[2]))
-    # Add x axis half, accounting for skipped middle values.
+    # Add x axis mid-point, accounting for skipped middle values.
     x_dist = (x_dist + len(str(min_xy_max_xy[2])) - \
         pos.border) // 2 
     skip = 0
+    min_x = min_xy_max_xy[0]
+    x_range = min_xy_max_xy[2] - min_x
     if points_to_skip[1] > 0:
         skip = points_to_skip[0]
-        x_range = min_xy_max_xy[2] - min_xy_max_xy[0]
-        half_val = min_xy_max_xy[2] * skip // x_range
+        half_val = x_range * skip // x_range + min_x
         hidden_str1 = f'|...| points {skip} to '
         hidden_str2 = f'{skip + points_to_skip[1]} hidden.'
         win.addstr(3, x_dist, hidden_str1+hidden_str2)
     else:
-        half_val = min_xy_max_xy[2] // 2
+        half_val = x_range // 2 + min_x
     win.addstr(pos.h - pos.border + 1, x_dist - 1, str(half_val))
+    # Add x axis minimum.
+    win.addstr(pos.x_axis_base[0] + 1, pos.x_axis_base[1] + 1, 
+        str(min_x))
 
 
 def draw_points(win, pos, mode):
@@ -600,7 +604,7 @@ def offer_modes(win, pos, mode, data_manager):
     mode_str = f'Modes: {" ".join(highlighted)}'
     #mode_str = current + ' ['.join(available) + '] (press key)'
     win.addstr(1, pos.w // 2 - len(mode_str), mode_str)
-    a=1
+
 
 
 def draw_graph(sc, win, mode, data_manager):
