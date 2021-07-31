@@ -48,7 +48,7 @@ mode_params = {
     ModeNames.BASE_FEE: {
         'mode_key': mode_keys[1],
         'button': '2',
-        'graph_title': 'Recent fees',
+        'graph_title': 'Recent priority fees',
         'x_axis_name': 'Block number',
         'y_axis_name': price_string,
         'oldest_required': 200,
@@ -57,33 +57,42 @@ mode_params = {
         'transaction_params': ['gasPrice','maxFeePerGas',
             'maxPriorityFeePerGas'],
         'sets_to_graph': [            
-
-            {'name': 'Q1 priority ',
+            {'name': 'max',
+            'symbol': '*',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'max'},
+            {'name': 'Q4 ',
+            'symbol': '┬',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q4'}, 
+            {'name': 'Q1 ',
             'symbol': '▀',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q1'},
-            {'name': 'med priority',
+            {'name': 'med',
             'symbol': '█',
             'x': 'block_number',
             'loc_for_set': 'statistics',
             'y': 'Q2'},
-            {'name': 'Q3 priority ',
+            {'name': 'Q3 ',
             'symbol': '▄',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q3'},
-            {'name': 'max priority',
-            'symbol': '┬',
-            'loc_for_set': 'statistics',
-            'x': 'block_number',
-            'y': 'Q4'},            
-            {'name': 'min priority',
+            {'name': 'Q0 ',
             'symbol': '┴',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q0'},
-            {'name': 'Base fee    ',
+            {'name': 'min',
+            'symbol': '*',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'min'},
+            {'name': 'Base fee',
             'symbol': '≡',
             'loc_for_set': 'statistics',
             'x': 'block_number',
@@ -172,11 +181,11 @@ def block_analysis(block):
     # calling eth_getTransactionReceipt for each transaction
     # TODO IQR
     percentiles = {
-        'Q0': 0,
+        'min': 0,
         'Q1': 25,
         'Q2': 50,
         'Q3': 75,
-        'Q4': 100
+        'max': 100
     }
     for name, percentile in percentiles.items():
         # Use gas_clock for the index of the transaction
@@ -184,6 +193,22 @@ def block_analysis(block):
         tx_index = bisect_left(gas_clock, percentile*block_gas/100)
         fee = tx_by_fee[tx_index]['inferred_priority']
         result[name] = fee
+
+    # Lower and upper outlier thresholds.
+    interquartile_range = result['Q3'] - result['Q1']
+    outlier_upper = int(result['Q2'] + 1.5 * interquartile_range)
+    outlier_lower = int(result['Q2'] - 1.5 * interquartile_range)
+
+    # Define upper and lower whiskers based on presence of outliers.
+    if result['min'] < outlier_lower:
+        result['Q0'] = outlier_lower
+    else:
+        result['Q0'] = result['min']
+
+    if result['max'] > outlier_upper:
+        result['Q4'] = outlier_upper
+    else:
+        result['Q4'] = result['max']
 
     result['block_number'] = int(block['number'], 16)
     return result
