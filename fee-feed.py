@@ -27,62 +27,68 @@ mode_params = {
         'sets_to_graph': [
             {'name': 'maxPriorityFeePerGas', 
             'symbol': '^', 
-            'type': 'transactions', 
+            'loc_for_set': 'transactions', 
             'x': 'transactionIndex',
             'y': 'maxPriorityFeePerGas'},
             {'name': 'maxFeePerGas', 
             'symbol': '*', 
-            'type': 'transactions', 
+            'loc_for_set': 'transactions', 
             'x': 'transactionIndex',
             'y': 'maxFeePerGas'},
             {'name': 'gasPrice', 
             'symbol': '#', 
-            'type': 'transactions', 
+            'loc_for_set': 'transactions', 
             'x': 'transactionIndex',
             'y': 'gasPrice'}
         ],
-        'y_display_scale': 10**9
+        'y_display_scale': 10**9,
+        'loc_in_manager': 'latest_block_transactions'
     },
     ModeNames.BASE_FEE: {
         'mode_key': mode_keys[1],
         'graph_title': 'Recent fees',
         'x_axis_name': 'Block number',
         'y_axis_name': price_string,
-        'oldest_required': 100,
+        'oldest_required': 200,
         'block_stats': ['base_fee','Q4','Q3','Q2','Q1','Q0'
             'mode_priority'],
         'transaction_params': ['gasPrice','maxFeePerGas',
             'maxPriorityFeePerGas'],
-        'sets_to_graph': [
-            {'name': 'Base fee',
-            'symbol': '*',
-            'x': 'block_number',
-            'y': 'base_fee'},
-            {'name': 'Max priority fee',
-            'symbol': '4',
-            'x': 'block_number',
-            'y': 'Q4'},
-            {'name': 'Upper quartile priority fee',
-            'symbol': '3',
-            'x': 'block_number',
-            'y': 'Q3'},
-            {'name': 'Median priority fee',
-            'symbol': '2',
-            'x': 'block_number',
-            'y': 'Q2'},
-            {'name': 'Lower quartile priority',
-            'symbol': '1',
+        'sets_to_graph': [            
+
+            {'name': 'Q1 priority ',
+            'symbol': '|',
+            'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q1'},
-            {'name': 'Minimum priority',
-            'symbol': '0',
-            'x': 'block_number',
-            'y': 'Q0'},
-            {'name': 'Mode priority',
+            {'name': 'med priority',
             'symbol': '.',
             'x': 'block_number',
-            'y': 'mode_priority'}
-        ]
+            'loc_for_set': 'statistics',
+            'y': 'Q2'},
+            {'name': 'Q3 priority ',
+            'symbol': '|',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q3'},
+            {'name': 'max priority',
+            'symbol': '-',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q4'},            
+            {'name': 'min priority',
+            'symbol': '-',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q0'},
+            {'name': 'Base fee    ',
+            'symbol': '*',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'base_fee'},
+        ],
+        'y_display_scale': 10**9,
+        'loc_in_manager': 'recent_blocks'
     }
 }
 
@@ -98,7 +104,7 @@ def hex_to_int(hex_string):
 
 
 def get_transactions_from_block(block, mode):
-    # Uses parameter list to get 
+    # Uses parameter list to get important fields from block. 
     transactions = [
         {
             key: hex_to_int(block_tx.get(key)) 
@@ -176,7 +182,7 @@ def block_analysis(block):
         fee = tx_by_fee[tx_index]['inferred_priority']
         result[name] = fee
 
-    result['number'] = int(block['number'], 16)
+    result['block_number'] = int(block['number'], 16)
     return result
 
 
@@ -244,9 +250,8 @@ def get_mode_from_key(keypress):
 
 def get_latest_only(modes):
     # Returns the latest block for quick displays
-    block = get_blocks(['latest'], modes[0])
-    block_num = block[0]['number']
-    return block, block_num
+    block = get_blocks(['latest'], modes[0])[0]
+    return block, block['number']
 
 
 def most_distant_needed(modes):
@@ -258,69 +263,71 @@ class BlockDataManager:
     # Holds data. Modes query the manager for data.
     # Periodically refreshes by calling node.
     def __init__(self, modes):
-
-        # Analysed blocks {str(block_number) : data} for modes to use.
-        self.recent_blocks = {}
+        self.all_data = {
+            m.params['loc_in_manager']: None for m in modes
+        }
         # When initialised, only get one block (for speed)
-        (block, num) = get_latest_only(modes)
-        self.latest_block_transactions = block
+        (block, num) = get_latest_only(modes) 
+        # Store for data for first mode to use.
+        loc = modes[0].params['loc_in_manager']
+        self.all_data[loc] = block
         self.oldest_block = num  # Oldest for which tx data is held.
         self.current_block = num  # Newest for which tx data is held.
         self.range_required = most_distant_needed(modes)
+        self.other_modes_ready = False
 
     def get_missing_blocks(self, newest_aware_of):
-        # Maintenance data management.
+        # Maintenance data management. Refreshes recent block list.
         # Assesses if block data needs are met, retrieves if needed.
         oldest_needed = newest_aware_of - self.range_required
         needed = [i for i in range(oldest_needed,
             newest_aware_of)]
         # Remove outdated blocks.
-        relevant = {
-            block: self.recent_blocks[block]
-            for block in self.recent_blocks
-            if int(block.items()[0]) in needed
-        }
+        cached = self.all_data['recent_blocks']
+        relevant = []
+        if cached is not None:
+            cached = cached['statistics']
+            relevant = [
+                block for block in cached
+                if block['block_number'] in needed 
+            ]
         # Fetch missing blocks.
         missing_numbers = [
-            block for block in needed
-            if block not in relevant.keys()
+            block_num for block_num in needed
+            if not any(b['block_number'] for b in relevant)
         ]
         retrieved = get_blocks(missing_numbers, mode=None)
         [
-            relevant.update({block['number']: block})
+            relevant.append(block)
             for block in retrieved
             if block is not None
         ]
-
-        self.recent_blocks = relevant       
+        new_stats = {'statistics': relevant}
+        self.all_data['recent_blocks'] = new_stats      
         # TODO: Handle reorgs.
         # E.g., Starting from recent, walk the hashes and discard
         # if not in chain, then refill any missing.
         self.current_block = newest_aware_of
+        self.other_modes_ready = True
 
 
-    def get_all_data(self, modes):
-        # Batch call for first large request.
-        # Retrieves the data required for each mode.
-        # Modes specify the raw data they will need.
-        # API is called so that any mode will have the data ready.
-        (self.latest_block_transactions, 
-            self.current_block) = get_latest_only(modes) 
-        # TODO Call node to get data and save as cache.
-        # self.recent_base_fees = xyz
-        # self.recent_priority/maxfees = xyz
-        # self.latest_block_transactions = xyz
-        pass
+    def get_first_mode_data(self, modes):
+        # Gets data from latest block for fast display.
+        block, block_num = get_latest_only(modes) 
+        self.all_data['latest_block_transactions'] = block
+        self.current_block = block_num
+
 
 def format_set(data, format):
     # Accepts block data and produces values in standard format.
     # set_name, set_symbol, x_list, y_list.
-    if format['type'] == 'transactions':
-        x = [t[format['x']]for t in data[0]['transactions']]
-        y = [t[format['y']]for t in data[0]['transactions']]
-        return {
-            'set_name':format['name'],'set_symbol':format['symbol'],
-            'x_list': x, 'y_list': y} 
+    set_data = data[format['loc_for_set']]
+    a=1
+    x = [t[format['x']]for t in set_data]
+    y = [t[format['y']]for t in set_data]
+    return {
+        'set_name':format['name'],'set_symbol':format['symbol'],
+        'x_list': x, 'y_list': y} 
         
 class Mode:
     # The graph context (data, window display)
@@ -329,26 +336,19 @@ class Mode:
         self.name = get_mode_from_key(keypress)
         # Get unique mode features from global paramater config dict.
         self.params = mode_params[self.name]
+        # A list of data dicts with x, y, name, symbol.
         self.data = None
         self.current_block = None
 
+
     def prepare_data(self, data_manager):
-        # Accepts data, uses self.params to select and refine.
-        # Saves a list of sets of points to be graphed, with 
+        # Accepts manager, uses self.params to select and refine.
+        # Saves a list of sets of points to be graphed. 
+        data = data_manager.all_data[self.params['loc_in_manager']]
         self.data = [
-            format_set(data_manager.latest_block_transactions, 
-                format)
+            format_set(data, format)
             for format in self.params['sets_to_graph']]
         self.current_block = data_manager.current_block
-
-    def define_chunks(self):
-        if self.name == ModeNames.BASE_FEE:
-            start = 5072606
-            # start = 5062605  # Goerli fork block. 
-            self.start_block = start # a goerli block.
-            self.end_block = start + 1000
-            self.block_chunks = 100
-        return self
 
 
 class Keypress:
@@ -387,6 +387,7 @@ class Interval:
         self.ready_to_call_block = False
         self.ready_for_startup_data = False
         self.startup_data_done = False
+
     
     def reset(self):
         self.time = int(time.time())
@@ -408,6 +409,7 @@ class Interval:
                 self.reset()
             else:
                 self.ready_to_call_block = False
+
 
 class Positions:
     # Coordinates of elements, in "(y, x)" where paired.
@@ -547,7 +549,7 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
         skip = points_to_skip[0]
         x_range = min_xy_max_xy[2] - min_xy_max_xy[0]
         half_val = min_xy_max_xy[2] * skip // x_range
-        hidden_str1 = f'|...| Tx {skip} to '
+        hidden_str1 = f'|...| points {skip} to '
         hidden_str2 = f'{skip + points_to_skip[1]} hidden.'
         win.addstr(3, x_dist, hidden_str1+hidden_str2)
     else:
@@ -596,8 +598,9 @@ def cycle(sc, win, keypress, interval, modes, data_manager):
     mode = modes[mode_keys.index(keypress.current_mode)]
     if interval.ready_to_call_block:
         # If a new block has been observed.
-        data_manager.get_all_data(modes)
-        modes[0].prepare_data(data_manager)
+        data_manager.get_first_mode_data(modes)
+        # Construct graphable representation.
+        [m.prepare_data(data_manager) for m in modes]
         win.erase()
     if interval.ready_for_startup_data:
         # An x millisecond delay is applied after first window display
