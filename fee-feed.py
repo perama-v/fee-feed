@@ -5,13 +5,15 @@ import requests
 import time
 from itertools import count, accumulate
 from bisect import bisect_left
+import statistics
 
 # Change this to the address of your node.
 node = "http://127.0.0.1:8545"
 
-ModeNames = Enum('Modes', 'LATEST_FEES BASE_FEE')
-mode_keys = [ord('1'), ord('2')]
+ModeNames = Enum('Modes', 'LATEST_FEES BASE_FEE FULLNESS SPREAD BURN')
+mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'), ord('5')]
 price_string = 'nanoether per gas (Gwei per gas)'
+oldest_block_depth = 200
 mode_params = {
     ModeNames.LATEST_FEES: {
         'mode_key': mode_keys[0],
@@ -27,17 +29,17 @@ mode_params = {
             'maxFeePerGas','maxPriorityFeePerGas'],
         'sets_to_graph': [
             {'name': 'maxPriorityFeePerGas', 
-            'symbol': '^', 
+            'symbol': '°', 
             'loc_for_set': 'transactions', 
             'x': 'transactionIndex',
             'y': 'maxPriorityFeePerGas'},
             {'name': 'maxFeePerGas', 
-            'symbol': '*', 
+            'symbol': '═', 
             'loc_for_set': 'transactions', 
             'x': 'transactionIndex',
             'y': 'maxFeePerGas'},
             {'name': 'gasPrice', 
-            'symbol': '#', 
+            'symbol': '╦', 
             'loc_for_set': 'transactions', 
             'x': 'transactionIndex',
             'y': 'gasPrice'}
@@ -51,7 +53,7 @@ mode_params = {
         'graph_title': 'Recent priority fees',
         'x_axis_name': 'Block number',
         'y_axis_name': price_string,
-        'oldest_required': 200,
+        'oldest_required': oldest_block_depth,
         'block_stats': ['base_fee','Q4','Q3','Q2','Q1','Q0'
             'mode_priority'],
         'transaction_params': ['gasPrice','maxFeePerGas',
@@ -100,7 +102,88 @@ mode_params = {
         ],
         'y_display_scale': 10**9,
         'loc_in_manager': 'recent_blocks'
-    }
+    },
+    ModeNames.FULLNESS: {
+            'mode_key': mode_keys[2],
+            'button': '3',
+            'graph_title': 'Block utilisation and other measures',
+            'x_axis_name': 'Block number',
+            'y_axis_name': 'Scalar value (see legend)',
+            'oldest_required': oldest_block_depth,
+            'block_stats': ['gas_utilisation', 'type_2_utilisation',
+            'lowest_nonzero_fee'],
+            'sets_to_graph': [            
+                {'name': 'Gas utilisation',
+                'symbol': '░',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'gas_utilisation'},
+                {'name': 'Type 2 utilisation',
+                'symbol': '²',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'type_2_utilisation'},
+                {'name': 'lowest nonzero fee (nanoether)',
+                'symbol': '╩',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'lowest_nonzero_fee'},
+                ],
+            'y_display_scale': 1,
+            'loc_in_manager': 'recent_blocks'
+        },
+    ModeNames.SPREAD: {
+            'mode_key': mode_keys[3],
+            'button': '4',
+            'graph_title': 'Fee spread and other measures',
+            'x_axis_name': 'Block number',
+            'y_axis_name': 'Scalar value (see legend)',
+            'oldest_required': oldest_block_depth,
+            'block_stats': ['priority_std',
+                'average_max_multiple', 'base_fee'],
+            'sets_to_graph': [            
+                {'name': 'Priority standard deviation',
+                'symbol': 'σ',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'priority_std'},
+                {'name': 'Average max fee / basefee',
+                'symbol': '×',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'average_max_multiple'},
+                {'name': 'Base fee',
+                'symbol': '≡',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'base_fee'},
+            ],
+            'y_display_scale': 10**9,
+            'loc_in_manager': 'recent_blocks'
+        },
+    ModeNames.BURN: {
+            'mode_key': mode_keys[4],
+            'button': '5',
+            'graph_title': 'Ether burned for recent blocks',
+            'x_axis_name': 'Block number',
+            'y_axis_name': 'Ether burned',
+            'oldest_required': oldest_block_depth,
+            'block_stats': ['block_burn', 'cumulative_burn'],
+            'sets_to_graph': [            
+                {'name': 'Block burn',
+                'symbol': '¤',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'block_burn'},        
+                {'name': 'Recent cumulative burn',
+                'symbol': 'ð',
+                'loc_for_set': 'statistics',
+                'x': 'block_number',
+                'y': 'cumulative_burn'},
+            ],
+            'y_display_scale': 10**9,
+            'loc_in_manager': 'recent_blocks'
+        }
 }
 
 # Maintains the sequence of JSON-RPC API calls.
@@ -150,36 +233,23 @@ def infer_priority_fee(transaction, base_fee):
     return transaction
 
 
-def block_analysis(block):
-    # Gets information about fee, e.g. base fee and some
-    # gas-based percentiles of effective miner fee.
-    result = {}
-    if len(block['transactions']) == 0:
-        return None
-
-    base_fee = 0
-    if 'baseFeePerGas' in block.keys():
-        base_fee = int(block['baseFeePerGas'], 16)
-    result['base_fee'] = base_fee
-    with_inferred = [
-        infer_priority_fee(transaction, base_fee)
-        for transaction in block['transactions']]
-
+def calculate_priority_boxplot(block, with_inferred_priority, result):
+    # Generates values used for box plot, adds to result.
     # Sort tx list by inferred priority fee:
-    tx_by_fee = sorted(with_inferred,
+    tx_by_fee = sorted(with_inferred_priority,
         key = lambda tx: tx['inferred_priority'])
-    # Make a list of accumulating gas
-
+    
+    # Make a list of accumulating gas.    
     gas_limit_vals = [
         int(tx['gas'], 16)
-        for tx in with_inferred
+        for tx in with_inferred_priority
     ]
     gas_clock = list(accumulate(gas_limit_vals))
     block_gas = int(block['gasUsed'], 16)
+    result['block_gas'] = block_gas
     # Get fee percentiles by gas limit (rather than index).
     # TODO (maybe - might be slow.) change this to gas used by
     # calling eth_getTransactionReceipt for each transaction
-    # TODO IQR
     percentiles = {
         'min': 0,
         'Q1': 25,
@@ -209,6 +279,100 @@ def block_analysis(block):
         result['Q4'] = outlier_upper
     else:
         result['Q4'] = result['max']
+    return result
+
+
+def calculate_gas_utilisation(block, result):
+    # Percentage of possible gas used by a block
+    # range: [0-100], base fee targets 50.
+    used = int(block['gasUsed'], 16)
+    limit =  int(block['gasLimit'], 16)
+    result['gas_utilisation'] = int(100 * used / limit)
+    return result
+
+
+def calculate_lowest_nonzero_fee(sorted_fees, result):
+    # Finds the lowest fee the miner accepted that was > 0.
+    # To excluded miner-originated / MEV transactions.
+    # Returns as nanoether (10**9 wei), unlike other fields.
+    min = sorted_fees[0]
+    for fee in sorted_fees:
+        if fee > 0:
+            min = fee
+            break 
+    result['lowest_nonzero_fee'] = int(min / 10**9)
+    return result
+
+
+def calculate_priority_std(inferred_fees, result):
+    # std of the max priority fee for a block.
+    std = 0
+    if len(inferred_fees) > 1:
+        std = int(statistics.stdev(inferred_fees))
+    result['priority_std'] = std
+    return result 
+
+    
+def calculate_type_2_utilisation(block, result):
+    # Percentage of transactions that are type 0x2 (London).
+    # range: [0-100]
+    num = 0
+    for t in block['transactions']:
+        if t['type'] == '0x2': 
+            num += 1
+    percentage = 100 * num // len(block['transactions'])
+    result['type_2_utilisation'] = percentage
+    return result 
+
+    
+def calculate_average_max_multiple(block, fees, result):
+    # The relative value of the average max fee vs the base fee.
+    # range: [1-any]. 5 = max fees are 5x base fee. 
+    # 1.2 = max fees are 20% higher than the base fee.
+    multiple = 0
+    if 'baseFeePerGas' in block.keys():
+        mean = statistics.mean(fees)
+        multiple = int(mean / block['baseFeePerGas'])
+    result['average_max_multiple'] = multiple
+    return result 
+
+
+def calculate_block_burn(block, result):
+    # Accumulated burn over the currently displayed block range.
+    burn = 0
+    if 'baseFeePerGas' in block.keys():
+        burn = block['gasUsed'] * block['baseFeePerGas']
+    result['block_burn'] = burn
+    return result
+
+    
+def block_analysis(block):
+    # Gets information about fee, e.g. base fee and some
+    # gas-based percentiles of effective miner fee.
+    result = {}
+    if len(block['transactions']) == 0:
+        return None
+
+    # Get base fee.
+    base_fee = 0
+    if 'baseFeePerGas' in block.keys():
+        base_fee = int(block['baseFeePerGas'], 16)
+    result['base_fee'] = base_fee
+    
+    
+    with_inferred = [
+        infer_priority_fee(transaction, base_fee)
+        for transaction in block['transactions']]
+    fees = sorted([
+        block['inferred_priority'] for block in with_inferred])
+
+    result = calculate_priority_boxplot(block, with_inferred, result)
+    result = calculate_lowest_nonzero_fee(fees, result)
+    result = calculate_gas_utilisation(block, result)
+    result = calculate_priority_std(fees, result)
+    result = calculate_type_2_utilisation(block, result)
+    result = calculate_average_max_multiple(block, fees, result)
+    result = calculate_block_burn(block, result)
 
     result['block_number'] = int(block['number'], 16)
     return result
@@ -286,6 +450,17 @@ def most_distant_needed(modes):
     # Finds the number of recent blocks needed at all times.
     return max([mode.params['oldest_required'] for mode in modes])
 
+def get_cumulative_burn(block_stats):
+    # Accepts up to date list of analysed block data.
+    # Sums wei burned, adds total to each block incrementally.
+    current_total = 0
+    ordered = sorted(block_stats, key = lambda x: x['block_number'])
+    with_burn_total = []
+    for block in ordered:
+        current_total += block['block_burn']
+        block['cumulative_burn'] = current_total
+        with_burn_total.append(block)
+    return with_burn_total
 
 class BlockDataManager:
     # Holds data. Modes query the manager for data.
@@ -335,8 +510,13 @@ class BlockDataManager:
                 for block in retrieved
                 if block is not None
             ]
-        new_stats = {'statistics': relevant}
+        # Add burn accumulated over current range.
+        relevant_with_burn = get_cumulative_burn(relevant)
+        new_stats = {'statistics': relevant_with_burn}
+
+
         self.all_data['recent_blocks'] = new_stats      
+
         # TODO: Handle reorgs.
         # E.g., Starting from recent, walk the hashes and discard
         # if not in chain, then refill any missing.
@@ -465,6 +645,7 @@ class Positions:
 
 def draw_axes(win, pos, mode):
     # Creates and labels graph axes.
+
     [
         win.addstr(pos.border + i, pos.w - pos.border - 3 - \
                 len(set['set_name']),
@@ -526,7 +707,9 @@ def scale_value(val, val_small_large, coord_small_large):
     src = val_small_large  # (min, max)
     dst = coord_small_large  # (minpix, maxpix)
     if src[1] == 0:
-        return (0, 0)  # If none of the y vals > 0.
+        return 0  # If none of the y vals > 0.
+    if src[0] == src[1]:
+        return int(src[0]) # If there is a single y value.
     s = (1 - (val - src[0]) / (src[1]-src[0])) * \
         (dst[1]-dst[0]) + dst[0]
     return int(s)
@@ -567,12 +750,15 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     # Places values on the axes.
     # Add y values to axes, high to low.    
     n = 4  # number of notches to display y values at.
+    yscale = mode.params['y_display_scale']
     for i in range(n):
         y_height = pos.y_axis_tip[0] + i * pos.y_axis_height // n
-        y_val = str((n-i) * min_xy_max_xy[3] // n // \
-            mode.params['y_display_scale'])
+        y_val = str((n-i) * min_xy_max_xy[3] // n // yscale)
         win.addstr(y_height, pos.y_axis_tip[1] - 3, y_val)
-    
+    # Draw y minimum
+    win.addstr(pos.x_axis_base[0] - 1, pos.x_axis_base[1] - 3,
+        str(int(min_xy_max_xy[1] / yscale)))
+
     # Move the max axis if the axis is not fully filled.
     filler = max(0, pos.x_axis_width - \
         len(mode.data[0]['x_list']))
@@ -645,7 +831,7 @@ def draw_graph(sc, win, mode, data_manager):
     return
 
 
-def detect_keypress(win, keypress, data_manager):
+def detect_window_and_keypress(win, keypress, data_manager):
     # Reacts to either window being resized or keyboard activity.
     keypress.read(win, data_manager)
     if keypress.key == curses.KEY_RESIZE:
@@ -658,7 +844,7 @@ def detect_keypress(win, keypress, data_manager):
 def cycle(sc, win, keypress, interval, modes, data_manager): 
     # Performs one draw window cycle.
     interval.update(data_manager.current_block)
-    detect_keypress(win, keypress, data_manager)
+    detect_window_and_keypress(win, keypress, data_manager)
     # Get mode define by keyboard number input.
     mode = modes[mode_keys.index(keypress.current_mode)]
     if interval.ready_to_call_block:
