@@ -19,7 +19,7 @@ See what was baked into the last block:
 
 Use python 3.x and install the one external dependency.
 
-    pip install requests
+    pip install requests python-dotenv
 
 Run:
 
