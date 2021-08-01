@@ -166,7 +166,7 @@ mode_params = {
             'button': '5',
             'graph_title': 'Ether burned for recent blocks',
             'x_axis_name': 'Block number',
-            'y_axis_name': 'Ether burned',
+            'y_axis_name': 'picoether burned',
             'oldest_required': oldest_block_depth,
             'block_stats': ['block_burn', 'cumulative_burn'],
             'sets_to_graph': [            
@@ -181,7 +181,7 @@ mode_params = {
                 'x': 'block_number',
                 'y': 'cumulative_burn'},
             ],
-            'y_display_scale': 10**9,
+            'y_display_scale': 10**6, 
             'loc_in_manager': 'recent_blocks'
         }
 }
@@ -332,7 +332,7 @@ def calculate_average_max_multiple(block, fees, result):
     multiple = 0
     if 'baseFeePerGas' in block.keys():
         mean = statistics.mean(fees)
-        multiple = int(mean / block['baseFeePerGas'])
+        multiple = int(mean / int(block['baseFeePerGas'], 16))
     result['average_max_multiple'] = multiple
     return result 
 
@@ -341,7 +341,8 @@ def calculate_block_burn(block, result):
     # Accumulated burn over the currently displayed block range.
     burn = 0
     if 'baseFeePerGas' in block.keys():
-        burn = block['gasUsed'] * block['baseFeePerGas']
+        burn = int(block['gasUsed'], 16) * \
+            int(block['baseFeePerGas'], 16)
     result['block_burn'] = burn
     return result
 
@@ -822,10 +823,13 @@ def offer_modes(win, pos, mode, data_manager):
 
 def draw_graph(sc, win, mode, data_manager):
     # Gets positions of elements for the current mode, draws.
-    if mode.data is None:
-        return
     pos = Positions(sc, win)
     offer_modes(win, pos, mode, data_manager)
+    if mode.data is None or len(mode.data[0]['x_list']) == 0:
+        msg = f'Block {mode.current_block} is empty'
+        win.addstr(pos.h // 2, pos.w // 2 - len(msg) // 2, msg)
+        return
+    
     draw_points(win, pos, mode)
     draw_axes(win, pos, mode)
     return
