@@ -1,8 +1,8 @@
 # fee-feed
-Minimal Ethereum fee data viewer for the terminal, contained in a single python script. Connects to your node and displays some 
-metrics in real-time. 
+Minimal Ethereum fee data viewer for the terminal, contained in a single python script. Connects to your node and displays some
+metrics in real-time.
 
-Boxplots of fees for the past few hundred blocks to give context 
+Boxplots of fees for the past few hundred blocks to give context
 to the fee market.
 
 ![img](/img/mainnet_2.png)
@@ -25,6 +25,12 @@ Run:
 
     python fee-feed.py
 
+### Node configuration
+
+Create a file called '.env' and populated it with the url for your node as follows:
+
+RPC_URL='https://localhost:8545'
+
 ### Operation
 
 Control with the keyboard:
@@ -34,7 +40,7 @@ Control with the keyboard:
 
 ### Stats
 
-Standard deviation of the priority fees. 
+Standard deviation of the priority fees.
 
 See what multiple of the base fee the average max fee is.
 
@@ -64,7 +70,7 @@ Goerli:
 
 
 Dynamically adjusts if you resize the window to handle large or small
-monitors. 
+monitors.
 
 ![img](/img/mainnet_5.png)
 
@@ -83,17 +89,17 @@ Functions with any testnet without configuration, tested on:
 
 You can add new modes pretty easily:
 
-1. Add a mode the configuration section at the 
+1. Add a mode the configuration section at the
 top of the file, replicating what is already there, and changing the
 names and button.
-2. Add a function to populate your newly named data. Search for 
+2. Add a function to populate your newly named data. Search for
 "# Add new data functions here."
 
 ## Issues
 
-The boxplots are calculated on quartiles for maxPriorityFeePerGas, 
+The boxplots are calculated on quartiles for maxPriorityFeePerGas,
 weighted by gas - but the gas value is gas limit, rather than
-gas used for that transaction. The prices are correct, but the 
+gas used for that transaction. The prices are correct, but the
 distribution might be off compared with feeHistory API results.
 
 ## Disclaimer

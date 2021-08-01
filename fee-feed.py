@@ -32,19 +32,19 @@ mode_params = {
         'transaction_params': ['type','gasPrice','transactionIndex',
             'maxFeePerGas','maxPriorityFeePerGas'],
         'sets_to_graph': [
-            {'name': 'maxPriorityFeePerGas', 
-            'symbol': '°', 
-            'loc_for_set': 'transactions', 
+            {'name': 'maxPriorityFeePerGas',
+            'symbol': '°',
+            'loc_for_set': 'transactions',
             'x': 'transactionIndex',
             'y': 'maxPriorityFeePerGas'},
-            {'name': 'maxFeePerGas', 
-            'symbol': '═', 
-            'loc_for_set': 'transactions', 
+            {'name': 'maxFeePerGas',
+            'symbol': '═',
+            'loc_for_set': 'transactions',
             'x': 'transactionIndex',
             'y': 'maxFeePerGas'},
-            {'name': 'gasPrice', 
-            'symbol': '╦', 
-            'loc_for_set': 'transactions', 
+            {'name': 'gasPrice',
+            'symbol': '╦',
+            'loc_for_set': 'transactions',
             'x': 'transactionIndex',
             'y': 'gasPrice'}
         ],
@@ -62,7 +62,7 @@ mode_params = {
             'mode_priority'],
         'transaction_params': ['gasPrice','maxFeePerGas',
             'maxPriorityFeePerGas'],
-        'sets_to_graph': [            
+        'sets_to_graph': [
             {'name': 'max',
             'symbol': '*',
             'loc_for_set': 'statistics',
@@ -72,7 +72,7 @@ mode_params = {
             'symbol': '┬',
             'loc_for_set': 'statistics',
             'x': 'block_number',
-            'y': 'Q4'}, 
+            'y': 'Q4'},
             {'name': 'Q1 ',
             'symbol': '▀',
             'loc_for_set': 'statistics',
@@ -116,7 +116,7 @@ mode_params = {
             'oldest_required': oldest_block_depth,
             'block_stats': ['gas_utilisation', 'type_2_utilisation',
             'lowest_nonzero_fee'],
-            'sets_to_graph': [            
+            'sets_to_graph': [
                 {'name': 'Gas utilisation',
                 'symbol': '░',
                 'loc_for_set': 'statistics',
@@ -145,7 +145,7 @@ mode_params = {
             'oldest_required': oldest_block_depth,
             'block_stats': ['priority_std',
                 'average_max_multiple', 'base_fee'],
-            'sets_to_graph': [            
+            'sets_to_graph': [
                 {'name': 'Priority standard deviation',
                 'symbol': 'σ',
                 'loc_for_set': 'statistics',
@@ -173,19 +173,19 @@ mode_params = {
             'y_axis_name': 'picoether burned',
             'oldest_required': oldest_block_depth,
             'block_stats': ['block_burn', 'cumulative_burn'],
-            'sets_to_graph': [            
+            'sets_to_graph': [
                 {'name': 'Block burn',
                 'symbol': '¤',
                 'loc_for_set': 'statistics',
                 'x': 'block_number',
-                'y': 'block_burn'},        
+                'y': 'block_burn'},
                 {'name': 'Recent cumulative burn',
                 'symbol': 'ð',
                 'loc_for_set': 'statistics',
                 'x': 'block_number',
                 'y': 'cumulative_burn'},
             ],
-            'y_display_scale': 10**6, 
+            'y_display_scale': 10**6,
             'loc_in_manager': 'recent_blocks'
         }
 }
@@ -202,12 +202,12 @@ def hex_to_int(hex_string):
 
 
 def get_transactions_from_block(block, mode):
-    # Uses parameter list to get important fields from block. 
+    # Uses parameter list to get important fields from block.
     transactions = [
         {
-            key: hex_to_int(block_tx.get(key)) 
+            key: hex_to_int(block_tx.get(key))
             for key in mode.params['transaction_params']
-        }       
+        }
         for block_tx in block['transactions']
         if mode.params['get_transactions']
     ]
@@ -215,11 +215,11 @@ def get_transactions_from_block(block, mode):
 
 
 def parse_block(block, mode):
-    # Retrieves only the relevant data for a mode. 
+    # Retrieves only the relevant data for a mode.
     # If a desired field is absent, key will have 'None' value.
     single_block = {
         key: hex_to_int(block.get(key))
-        for key in mode.params['block_data'] 
+        for key in mode.params['block_data']
     }
     transactions = get_transactions_from_block(block, mode)
     single_block['transactions'] = transactions
@@ -242,8 +242,8 @@ def calculate_priority_boxplot(block, with_inferred_priority, result):
     # Sort tx list by inferred priority fee:
     tx_by_fee = sorted(with_inferred_priority,
         key = lambda tx: tx['inferred_priority'])
-    
-    # Make a list of accumulating gas.    
+
+    # Make a list of accumulating gas.
     gas_limit_vals = [
         int(tx['gas'], 16)
         for tx in with_inferred_priority
@@ -303,7 +303,7 @@ def calculate_lowest_nonzero_fee(sorted_fees, result):
     for fee in sorted_fees:
         if fee > 0:
             min = fee
-            break 
+            break
     result['lowest_nonzero_fee'] = int(min / 10**9)
     return result
 
@@ -314,31 +314,31 @@ def calculate_priority_std(inferred_fees, result):
     if len(inferred_fees) > 1:
         std = int(statistics.stdev(inferred_fees))
     result['priority_std'] = std
-    return result 
+    return result
 
-    
+
 def calculate_type_2_utilisation(block, result):
     # Percentage of transactions that are type 0x2 (London).
     # range: [0-100]
     num = 0
     for t in block['transactions']:
-        if t['type'] == '0x2': 
+        if t['type'] == '0x2':
             num += 1
     percentage = 100 * num // len(block['transactions'])
     result['type_2_utilisation'] = percentage
-    return result 
+    return result
 
-    
+
 def calculate_average_max_multiple(block, fees, result):
     # The relative value of the average max fee vs the base fee.
-    # range: [1-any]. 5 = max fees are 5x base fee. 
+    # range: [1-any]. 5 = max fees are 5x base fee.
     # 1.2 = max fees are 20% higher than the base fee.
     multiple = 0
     if 'baseFeePerGas' in block.keys():
         mean = statistics.mean(fees)
         multiple = int(mean / int(block['baseFeePerGas'], 16))
     result['average_max_multiple'] = multiple
-    return result 
+    return result
 
 
 def calculate_block_burn(block, result):
@@ -350,7 +350,7 @@ def calculate_block_burn(block, result):
     result['block_burn'] = burn
     return result
 
-    
+
 def block_analysis(block):
     # Gets information about fee, e.g. base fee and some
     # gas-based percentiles of effective miner fee.
@@ -363,8 +363,8 @@ def block_analysis(block):
     if 'baseFeePerGas' in block.keys():
         base_fee = int(block['baseFeePerGas'], 16)
     result['base_fee'] = base_fee
-    
-    
+
+
     with_inferred = [
         infer_priority_fee(transaction, base_fee)
         for transaction in block['transactions']]
@@ -379,7 +379,7 @@ def block_analysis(block):
     result = calculate_average_max_multiple(block, fees, result)
     result = calculate_block_burn(block, result)
 
-    # Add new data functions here. 
+    # Add new data functions here.
     # E.g., result = get_special_metric(block, result)
 
     result['block_number'] = int(block['number'], 16)
@@ -388,13 +388,13 @@ def block_analysis(block):
 
 def get_blocks(blocks, mode=None):
     # Calls a node and asks for blocks in chunks.
-    
+
     batch = [
         {
             "jsonrpc": "2.0",
             "id": next(block_call_ids),
             "method": "eth_getBlockByNumber",
-            "params": [f"{block}", True],
+            "params": [f"{str(hex(block))}", True],
         }
         for block in blocks
     ]
@@ -402,18 +402,18 @@ def get_blocks(blocks, mode=None):
 
     if mode is None:
         return [
-            block_analysis(res["result"]) 
+            block_analysis(res["result"])
             for res in responses
             ]
     else:
         return [
-            parse_block(res["result"], mode) 
+            parse_block(res["result"], mode)
             for res in responses
             ]
 
-def new_block_exists(known_block):
-    # This function asks node for the current block
-    # Returns True if higher than known block.
+
+def get_block_number():
+    # Returns the latest block number (integer)
     get_num = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -422,6 +422,13 @@ def new_block_exists(known_block):
         }
     res = requests.post(node, json=get_num).json()
     current = int(res["result"], 16)
+    return current
+
+
+def new_block_exists(known_block):
+    # This function asks node for the current block
+    # Returns True if higher than known block.
+    current = get_block_number()
     if current > known_block:
         return True
     return False
@@ -429,11 +436,11 @@ def new_block_exists(known_block):
 
 def get_data_batches(mode):
     # Organises desired data into groups for batch calling.
-    blocks = []        
-    for chunk in range(mode.start_block, mode.end_block, 
+    blocks = []
+    for chunk in range(mode.start_block, mode.end_block,
         mode.block_chunks):
         block_list = get_blocks(
-            range(chunk, 
+            range(chunk,
                 min(mode.end_block + 1, chunk + mode.block_chunks)),
             mode)
         [blocks.append(block) for block in block_list]
@@ -441,7 +448,7 @@ def get_data_batches(mode):
 
 
 def get_mode_from_key(keypress):
-    # Returns the ModeName for a given keypress. 
+    # Returns the ModeName for a given keypress.
     # ord('1') corresponding to the first (default) mode.
     for mode_name in ModeNames:
         if keypress == mode_params[mode_name]['mode_key']:
@@ -450,7 +457,8 @@ def get_mode_from_key(keypress):
 
 def get_latest_only(modes):
     # Returns the latest block for quick displays
-    block = get_blocks(['latest'], modes[0])[0]
+    latest = get_block_number()
+    block = get_blocks([latest], modes[0])[0]
     return block, block['number']
 
 
@@ -478,7 +486,7 @@ class BlockDataManager:
             m.params['loc_in_manager']: None for m in modes
         }
         # When initialised, only get one block (for speed)
-        (block, num) = get_latest_only(modes) 
+        (block, num) = get_latest_only(modes)
         # Store for data for first mode to use.
         first_mode = modes[0]
         loc = first_mode.params['loc_in_manager']
@@ -501,7 +509,7 @@ class BlockDataManager:
             cached = cached['statistics']
             relevant = [
                 block for block in cached
-                if block['block_number'] in needed 
+                if block['block_number'] in needed
             ]
         # Fetch missing blocks.
         have_block_nums = [
@@ -523,7 +531,7 @@ class BlockDataManager:
         new_stats = {'statistics': relevant_with_burn}
 
 
-        self.all_data['recent_blocks'] = new_stats      
+        self.all_data['recent_blocks'] = new_stats
 
         # TODO: Handle reorgs.
         # E.g., Starting from recent, walk the hashes and discard
@@ -534,7 +542,7 @@ class BlockDataManager:
 
     def get_first_mode_data(self, modes):
         # Gets data from latest block for fast display.
-        block, block_num = get_latest_only(modes) 
+        block, block_num = get_latest_only(modes)
         self.all_data['latest_block_transactions'] = block
         self.current_block = block_num
 
@@ -548,8 +556,8 @@ def format_set(data, format):
     y = [t[format['y']]for t in set_data]
     return {
         'set_name':format['name'],'set_symbol':format['symbol'],
-        'x_list': x, 'y_list': y} 
-        
+        'x_list': x, 'y_list': y}
+
 
 class Mode:
     # The graph context (data, window display)
@@ -564,7 +572,7 @@ class Mode:
 
     def prepare_data(self, data_manager):
         # Accepts manager, uses self.params to select and refine.
-        # Saves a list of sets of points to be graphed. 
+        # Saves a list of sets of points to be graphed.
         data = data_manager.all_data[self.params['loc_in_manager']]
         self.data = [
             format_set(data, format)
@@ -579,7 +587,7 @@ class Keypress:
         self.active = True
         self.current_mode = starting_key
         self.mode_changed = False
-        
+
     def modify_mode(self):
         # Interprets mode selection when a number key is pressed.
         if self.key == self.current_mode:
@@ -622,7 +630,7 @@ class Interval:
     def startup_data_retrieved(self):
         self.ready_for_startup_data = False
         self.startup_data_done = True
-    
+
     def update(self, current_block_num):
         self.sec_since_call =  int(time.time()) - self.time
         if not self.startup_data_done:
@@ -661,13 +669,13 @@ def draw_axes(win, pos, mode):
         for i, set in enumerate(mode.data)
     ]
     # x-axis
-    win.hline(pos.x_axis_base[0], pos.x_axis_base[1] + 1, 
+    win.hline(pos.x_axis_base[0], pos.x_axis_base[1] + 1,
         '_', pos.x_axis_width)
     x_name = mode.params['x_axis_name']
     win.addstr(pos.h - 2, 1 + \
         pos.x_axis_base[1] + pos.x_axis_width - len(x_name), x_name)
     # y-axis
-    win.vline(pos.y_axis_tip[0], pos.y_axis_tip[1], 
+    win.vline(pos.y_axis_tip[0], pos.y_axis_tip[1],
         '|', pos.y_axis_height)
     win.addstr(1, pos.y_axis_tip[1] - 1, mode.params['y_axis_name'])
     # title
@@ -738,7 +746,7 @@ def get_coords(pos, x, y, min_xy_max_xy):
 
 
 def plot_set(win, pos, set, skip, min_xy_max_xy):
-    # Plots points of a set on an axis. 
+    # Plots points of a set on an axis.
     # Removes skipped middle points.
     skip_end = skip[0] + skip[1]
     for i in range(len(set['x_list'])):
@@ -749,14 +757,14 @@ def plot_set(win, pos, set, skip, min_xy_max_xy):
             shift = skip[1]
         xval, yval = (set['x_list'][i], set['y_list'][i])
         if yval is not None:
-            x, y = get_coords(pos, i - shift, yval, min_xy_max_xy) 
+            x, y = get_coords(pos, i - shift, yval, min_xy_max_xy)
             # Plot point
             win.addstr(y , x, set['set_symbol'])
 
 
 def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     # Places values on the axes.
-    # Add y values to axes, high to low.    
+    # Add y values to axes, high to low.
     n = 4  # number of notches to display y values at.
     yscale = mode.params['y_display_scale']
     for i in range(n):
@@ -770,13 +778,13 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     # Move the max axis if the axis is not fully filled.
     filler = max(0, pos.x_axis_width - \
         len(mode.data[0]['x_list']))
-    # Add x axis max. 
+    # Add x axis max.
     x_dist = pos.w - pos.border - len(str(min_xy_max_xy[2])) - filler
-    win.addstr(pos.h - pos.border + 1, x_dist + 1, 
+    win.addstr(pos.h - pos.border + 1, x_dist + 1,
         str(min_xy_max_xy[2]))
     # Add x axis mid-point, accounting for skipped middle values.
     x_dist = (x_dist + len(str(min_xy_max_xy[2])) - \
-        pos.border) // 2 
+        pos.border) // 2
     skip = 0
     min_x = min_xy_max_xy[0]
     x_range = min_xy_max_xy[2] - min_x
@@ -790,7 +798,7 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
         half_val = x_range // 2 + min_x
     win.addstr(pos.h - pos.border + 1, x_dist, str(half_val))
     # Add x axis minimum.
-    win.addstr(pos.x_axis_base[0] + 1, pos.x_axis_base[1] + 1, 
+    win.addstr(pos.x_axis_base[0] + 1, pos.x_axis_base[1] + 1,
         str(min_x))
 
 
@@ -800,7 +808,7 @@ def draw_points(win, pos, mode):
     min_xy_max_xy = get_min_xy_max_xy(mode)
     draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip)
     [
-        plot_set(win, pos, set, points_to_skip, min_xy_max_xy) 
+        plot_set(win, pos, set, points_to_skip, min_xy_max_xy)
         for set in mode.data
     ]
 
@@ -808,7 +816,7 @@ def draw_points(win, pos, mode):
 def fetch_missing_and_prepare(data_manager, modes):
     # Investigates what data is missing, retrieves, then prepares.
     data_manager.get_missing_blocks(
-        data_manager.current_block, modes) 
+        data_manager.current_block, modes)
     [m.prepare_data(data_manager) for m in modes]
 
 
@@ -836,7 +844,7 @@ def draw_graph(sc, win, mode, data_manager):
         msg = f'Block {mode.current_block} is empty'
         win.addstr(pos.h // 2, pos.w // 2 - len(msg) // 2, msg)
         return
-    
+
     draw_points(win, pos, mode)
     draw_axes(win, pos, mode)
     return
@@ -852,7 +860,7 @@ def detect_window_and_keypress(win, keypress, data_manager):
         keypress.mode_changed = False
 
 
-def cycle(sc, win, keypress, interval, modes, data_manager): 
+def cycle(sc, win, keypress, interval, modes, data_manager):
     # Performs one draw window cycle.
     interval.update(data_manager.current_block)
     detect_window_and_keypress(win, keypress, data_manager)
@@ -876,10 +884,10 @@ def cycle(sc, win, keypress, interval, modes, data_manager):
 def main(sc):
     # Creates a curses window in terminal and main tracking objects,
     # starts rendering in a loop that reacts to keypresses.
-    h, w = sc.getmaxyx()  
-    win = curses.newwin(h, w, 0, 0) 
-    win.keypad(1)  
-    curses.curs_set(0) 
+    h, w = sc.getmaxyx()
+    win = curses.newwin(h, w, 0, 0)
+    win.keypad(1)
+    curses.curs_set(0)
     starting_key = mode_keys[0]
     keypress = Keypress(starting_key)
     interval = Interval()
@@ -894,9 +902,9 @@ def main(sc):
     while active:
         win.border(0)
         win.timeout(100)
-        active = cycle(sc, win, keypress, interval, modes, 
+        active = cycle(sc, win, keypress, interval, modes,
             data_manager)
-       
+
     # Close program.
     h, w = sc.getmaxyx()
     goodbye = 'Bye! If you want to support me: ethworm.eth'
