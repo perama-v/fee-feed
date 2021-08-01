@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Change this to the address of your node.
-node = os.environ.get('RPC_URL');
+node = os.environ.get('RPC_URL')
 
 ModeNames = Enum('Modes', 'LATEST_FEES BASE_FEE FULLNESS SPREAD BURN')
 mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'), ord('5')]
