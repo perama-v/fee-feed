@@ -375,6 +375,9 @@ def block_analysis(block):
     result = calculate_average_max_multiple(block, fees, result)
     result = calculate_block_burn(block, result)
 
+    # Add new data functions here. 
+    # E.g., result = get_special_metric(block, result)
+
     result['block_number'] = int(block['number'], 16)
     return result
 
@@ -892,10 +895,10 @@ def main(sc):
        
     # Close program.
     h, w = sc.getmaxyx()
-    goodbye = 'Bye!'
+    goodbye = 'Bye! If you want to support me: ethworm.eth'
     sc.addstr(h//2, w//2 - len(goodbye)//2, goodbye)
     sc.refresh()
-    time.sleep(2)
+    time.sleep(3)
     curses.endwin()
 
 
