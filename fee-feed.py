@@ -321,16 +321,20 @@ class BlockDataManager:
                 if block['block_number'] in needed 
             ]
         # Fetch missing blocks.
+        have_block_nums = [
+            block['block_number'] for block in relevant
+        ]
         missing_numbers = [
             block_num for block_num in needed
-            if not any(b['block_number'] for b in relevant)
+            if not block_num in have_block_nums
         ]
-        retrieved = get_blocks(missing_numbers, mode=None)
-        [
-            relevant.append(block)
-            for block in retrieved
-            if block is not None
-        ]
+        if len(missing_numbers) > 0:
+            retrieved = get_blocks(missing_numbers, mode=None)
+            [
+                relevant.append(block)
+                for block in retrieved
+                if block is not None
+            ]
         new_stats = {'statistics': relevant}
         self.all_data['recent_blocks'] = new_stats      
         # TODO: Handle reorgs.
@@ -339,7 +343,6 @@ class BlockDataManager:
         self.current_block = newest_aware_of
         # Make all modes available.
         self.modes_available = [m.name for m in modes]
-        
 
     def get_first_mode_data(self, modes):
         # Gets data from latest block for fast display.
@@ -421,6 +424,7 @@ class Interval:
         self.time_msec_after_start = int(time.time()*1000) + delay_ms
         self.time = int(time.time())
         self.ready_to_call_block = False
+        # A small delay to allow the interface to appear.
         self.ready_for_startup_data = False
         self.startup_data_done = False
 
@@ -433,11 +437,9 @@ class Interval:
     
     def update(self, current_block_num):
         self.sec_since_call =  int(time.time()) - self.time
-
         if not self.startup_data_done:
             if int(time.time()*1000) > self.time_msec_after_start:
                 self.ready_for_startup_data = True
-
         if self.sec_since_call >= 3:
             if new_block_exists(current_block_num):
                 self.ready_to_call_block = True
@@ -619,7 +621,6 @@ def fetch_missing_and_prepare(data_manager, modes):
 def offer_modes(win, pos, mode, data_manager):
     # Shows the buttons that a user can press to select mode.
     current_button = mode_params[mode.name]['button']
-   # current = f'Current mode: [{current_button}]. Available: '
     available = [
         mode_params[m]['button']
         for m in data_manager.modes_available
@@ -628,10 +629,9 @@ def offer_modes(win, pos, mode, data_manager):
         f'[{m}]' if m == current_button else m
         for m in available
     ]
-    mode_str = f'Modes: {" ".join(highlighted)}'
-    #mode_str = current + ' ['.join(available) + '] (press key)'
-    win.addstr(1, pos.w // 2 - len(mode_str), mode_str)
-
+    mode_str = f'Modes: {" ".join(highlighted)}. '
+    mode_str += 'Press num key or q to quit.'
+    win.addstr(1, pos.w // 2 - len(mode_str)//2, mode_str)
 
 
 def draw_graph(sc, win, mode, data_manager):
@@ -656,7 +656,7 @@ def detect_keypress(win, keypress, data_manager):
 
 
 def cycle(sc, win, keypress, interval, modes, data_manager): 
-    # Perform one draw window cycle.
+    # Performs one draw window cycle.
     interval.update(data_manager.current_block)
     detect_keypress(win, keypress, data_manager)
     # Get mode define by keyboard number input.
@@ -664,18 +664,15 @@ def cycle(sc, win, keypress, interval, modes, data_manager):
     if interval.ready_to_call_block:
         # If a new block has been observed.
         data_manager.get_first_mode_data(modes)
+        data_manager.get_missing_blocks(
+            data_manager.current_block, modes)
         # Construct graphable representation.
         [m.prepare_data(data_manager) for m in modes]
         win.erase()
     if interval.ready_for_startup_data:
-        # An x millisecond delay is applied after first window display
-        # which allows the interface to start. Otherwise 
-        # main data collection would begin before display is shown.
         fetch_missing_and_prepare(data_manager, modes)
         interval.startup_data_retrieved()
-
     draw_graph(sc, win, mode, data_manager)
-
     return keypress.active
 
 
