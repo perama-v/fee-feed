@@ -51,6 +51,11 @@ Control with the keyboard:
 
 ### Stats
 
+See boxplots with outliers removed
+
+Mainnet:
+![img](/img/mainnet_14.png)
+
 Standard deviation of the priority fees.
 
 See what multiple of the base fee the average max fee is.

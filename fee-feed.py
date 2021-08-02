@@ -14,8 +14,10 @@ load_dotenv()
 # Change this to the address of your node.
 node = os.environ.get('RPC_URL')
 
-ModeNames = Enum('Modes', 'LATEST_FEES BASE_FEE FULLNESS SPREAD BURN')
-mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'), ord('5')]
+ModeNames = Enum('Modes', 'LATEST_FEES BOXPLOT BOXPLOT_NO_OUTLIERS \
+FULLNESS SPREAD BURN')
+mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'),
+    ord('5'), ord('6')]
 price_string = 'nanoether per gas (Gwei per gas)'
 oldest_block_depth = 200
 mode_params = {
@@ -52,7 +54,7 @@ mode_params = {
         'y_display_scale': 10**9,
         'loc_in_manager': 'latest_block_transactions'
     },
-    ModeNames.BASE_FEE: {
+    ModeNames.BOXPLOT: {
         'mode_key': mode_keys[1],
         'button': '2',
         'graph_title': 'Recent priority fees',
@@ -109,9 +111,50 @@ mode_params = {
         'y_display_scale': 10**9,
         'loc_in_manager': 'recent_blocks'
     },
+    ModeNames.BOXPLOT_NO_OUTLIERS: {
+        'mode_key': mode_keys[2],
+        'button': '3',
+        'graph_title': 'Recent priority fees - No outliers',
+        'x_axis_name': 'Block number',
+        'y_axis_name': price_string,
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['Q4','Q3','Q2','Q1','Q0'],
+        'transaction_params': ['maxFeePerGas',
+            'maxPriorityFeePerGas'],
+        'sets_to_graph': [
+            {'name': 'Q4 ',
+            'symbol': '┬',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q4'},
+            {'name': 'Q3 ',
+            'symbol': '▓',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q3'},
+            {'name': 'med',
+            'symbol': '▓',
+            'x': 'block_number',
+            'loc_for_set': 'statistics',
+            'y': 'Q2'},
+            {'name': 'Q1 ',
+            'symbol': '▓',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q1'},
+            {'name': 'Q0 ',
+            'symbol': '┴',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q0'}
+        ],
+        'set_plot_order': [0, 4, 2, 3, 1],
+        'y_display_scale': 10**9,
+        'loc_in_manager': 'recent_blocks'
+    },
     ModeNames.FULLNESS: {
-            'mode_key': mode_keys[2],
-            'button': '3',
+            'mode_key': mode_keys[3],
+            'button': '4',
             'graph_title': 'Block utilisation and other measures',
             'x_axis_name': 'Block number',
             'y_axis_name': 'Scalar value (see legend)',
@@ -140,8 +183,8 @@ mode_params = {
             'loc_in_manager': 'recent_blocks'
         },
     ModeNames.SPREAD: {
-            'mode_key': mode_keys[3],
-            'button': '4',
+            'mode_key': mode_keys[4],
+            'button': '5',
             'graph_title': 'Fee spread and other measures',
             'x_axis_name': 'Block number',
             'y_axis_name': 'Scalar value (see legend)',
@@ -170,8 +213,8 @@ mode_params = {
             'loc_in_manager': 'recent_blocks'
         },
     ModeNames.BURN: {
-            'mode_key': mode_keys[4],
-            'button': '5',
+            'mode_key': mode_keys[5],
+            'button': '6',
             'graph_title': 'Ether burned for recent blocks',
             'x_axis_name': 'Block number',
             'y_axis_name': 'picoether burned',
@@ -646,7 +689,7 @@ class Interval:
     # Determines if it is the right time to get data.
     def __init__(self):
         self.sec_since_call = 0
-        delay_ms = 200  # Delay after first window display.
+        delay_ms = 800  # Delay after first window display.
         self.time_msec_after_start = int(time.time()*1000) + delay_ms
         self.time = int(time.time())
         self.ready_to_call_block = False
@@ -874,7 +917,7 @@ def draw_graph(sc, win, mode, data_manager):
         return
     offer_modes(win, pos, mode, data_manager)
     if mode.data is None or len(mode.data[0]['x_list']) == 0:
-        msg = f'Block {mode.current_block} is empty'
+        msg = f'Fetching block {mode.current_block}...'
         win.addstr(pos.h // 2, pos.w // 2 - len(msg) // 2, msg)
         return
 
@@ -921,7 +964,6 @@ def main(sc):
     win = curses.newwin(h, w, 0, 0)
     win.keypad(1)
     curses.curs_set(0)
-    sc.refresh()
     starting_key = mode_keys[0]
     keypress = Keypress(starting_key)
     interval = Interval()
