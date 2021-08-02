@@ -245,21 +245,19 @@ def infer_priority_fee(transaction, base_fee):
 
 def calculate_priority_boxplot(block, with_inferred_priority, result):
     # Generates values used for box plot, adds to result.
-    # Sort tx list by inferred priority fee:
+    # Sort tx list by inferred priority fee.
+    # TODO consider excluding zero priority fee transactions.
     tx_by_fee = sorted(with_inferred_priority,
         key = lambda tx: tx['inferred_priority'])
 
     # Make a list of accumulating gas.
-    gas_limit_vals = [
-        int(tx['gas'], 16)
+    tx_gas_used = [
+        int(tx['gasUsed'], 16)
         for tx in with_inferred_priority
     ]
-    gas_clock = list(accumulate(gas_limit_vals))
+    gas_clock = list(accumulate(tx_gas_used))
     block_gas = int(block['gasUsed'], 16)
     result['block_gas'] = block_gas
-    # Get fee percentiles by gas limit (rather than index).
-    # TODO (maybe - might be slow.) change this to gas used by
-    # calling eth_getTransactionReceipt for each transaction
     percentiles = {
         'min': 0,
         'Q1': 25,
@@ -392,6 +390,29 @@ def block_analysis(block):
     return result
 
 
+def get_receipts(block):
+    # Accepts a block from getBlockByNumber
+    # Updates the transactions to include receipt data.
+    transactions = block['transactions']
+    if len(transactions) == 0:
+        return block
+    batch = [
+        {
+            "jsonrpc": "2.0",
+            "id": next(block_call_ids),
+            "method": "eth_getTransactionReceipt",
+            "params": [f"{t['hash']}"],
+        }
+        for t in transactions
+    ]
+    responses = requests.post(node, json=batch).json()
+    for index, res in enumerate(responses):
+        for key, val in res['result'].items():
+            transactions[index][key] = val
+    block['transactions'] = transactions
+    return block
+     
+
 def get_blocks(blocks, mode=None):
     # Calls a node and asks for blocks in chunks.
 
@@ -405,16 +426,19 @@ def get_blocks(blocks, mode=None):
         for block in blocks
     ]
     responses = requests.post(node, json=batch).json()
-
+    blocks_with_receipts = [
+        get_receipts(res["result"])
+        for res in responses
+    ]
     if mode is None:
         return [
-            block_analysis(res["result"])
-            for res in responses
+            block_analysis(block)
+            for block in blocks_with_receipts
             ]
     else:
         return [
-            parse_block(res["result"], mode)
-            for res in responses
+            parse_block(block, mode)
+            for block in blocks_with_receipts
             ]
 
 
@@ -897,6 +921,7 @@ def main(sc):
     win = curses.newwin(h, w, 0, 0)
     win.keypad(1)
     curses.curs_set(0)
+    sc.refresh()
     starting_key = mode_keys[0]
     keypress = Keypress(starting_key)
     interval = Interval()
