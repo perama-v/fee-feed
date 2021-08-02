@@ -844,6 +844,10 @@ def offer_modes(win, pos, mode, data_manager):
 def draw_graph(sc, win, mode, data_manager):
     # Gets positions of elements for the current mode, draws.
     pos = Positions(sc, win)
+    if pos.w < pos.border * 12 or pos.h < pos.border * 2:
+        msg = f'smol window'
+        win.addstr(pos.h // 2, pos.w // 2 - len(msg) // 2, msg)
+        return
     offer_modes(win, pos, mode, data_manager)
     if mode.data is None or len(mode.data[0]['x_list']) == 0:
         msg = f'Block {mode.current_block} is empty'
@@ -912,8 +916,11 @@ def main(sc):
 
     # Close program.
     h, w = sc.getmaxyx()
-    goodbye = 'Bye! If you want to support me: ethworm.eth'
-    sc.addstr(h//2, w//2 - len(goodbye)//2, goodbye)
+    goodbye = ['Bye!', '','ethworm.eth', 'If you want to support me', ]
+    [
+       sc.addstr(h//2 + 2 * i, w//2 - len(text)//2, text)
+       for i, text in enumerate(goodbye)
+    ]
     sc.refresh()
     time.sleep(3)
     curses.endwin()
