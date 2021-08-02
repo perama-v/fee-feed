@@ -5,33 +5,44 @@ metrics in real-time.
 Boxplots of fees for the past few hundred blocks to give context
 to the fee market.
 
-![img](/img/mainnet_2.png)
+![img](/img/mainnet_9.png)
 
 See how much ether is burned recently.
 
 ![img](/img/goerli_2.png)
 
-See what was baked into the last block:
+See the fee parameters for the last block in detail.
 
 ![img](/img/mainnet_1.png)
 
 ### Installation
 
-Use python 3.x and install the one external dependency.
+Optionally create an environment with python 3.x
+
+    python3 -m venv venv
+    source venv/bin/activate
+
+Install dependencies
 
     pip install requests python-dotenv
 
-Run:
-
-    python fee-feed.py
 
 ### Node configuration
 
-Create a file called '.env' and populated it with the url for your node as follows:
+Create a file called '.env' and populated it with the url for your 
+node as follows:
 
-RPC_URL='https://localhost:8545'
+    RPC_URL='http://localhost:8545'
 
 ### Operation
+
+(optional) activate environment:
+
+    source venv/bin/activate
+
+Run
+
+    python fee-feed.py
 
 Control with the keyboard:
 
@@ -67,8 +78,6 @@ Goerli:
 ---
 
 
-
-
 Dynamically adjusts if you resize the window to handle large or small
 monitors.
 
@@ -76,7 +85,12 @@ monitors.
 
 Pop it to the side to keep an eye on things.
 
-![img](/img/mainnet_6.png)
+![img](/img/mainnet_13.png)
+
+Keep it out of the way.
+
+![img](/img/mainnet_12.png)
+
 
 ## Networks
 

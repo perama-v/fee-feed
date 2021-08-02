@@ -48,6 +48,7 @@ mode_params = {
             'x': 'transactionIndex',
             'y': 'gasPrice'}
         ],
+        'set_plot_order': [0, 1, 2],
         'y_display_scale': 10**9,
         'loc_in_manager': 'latest_block_transactions'
     },
@@ -73,21 +74,21 @@ mode_params = {
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q4'},
-            {'name': 'Q1 ',
-            'symbol': '▀',
-            'loc_for_set': 'statistics',
-            'x': 'block_number',
-            'y': 'Q1'},
-            {'name': 'med',
-            'symbol': '█',
-            'x': 'block_number',
-            'loc_for_set': 'statistics',
-            'y': 'Q2'},
             {'name': 'Q3 ',
-            'symbol': '▄',
+            'symbol': '▓',
             'loc_for_set': 'statistics',
             'x': 'block_number',
             'y': 'Q3'},
+            {'name': 'med',
+            'symbol': '▓',
+            'x': 'block_number',
+            'loc_for_set': 'statistics',
+            'y': 'Q2'},
+            {'name': 'Q1 ',
+            'symbol': '▓',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q1'},
             {'name': 'Q0 ',
             'symbol': '┴',
             'loc_for_set': 'statistics',
@@ -104,6 +105,7 @@ mode_params = {
             'x': 'block_number',
             'y': 'base_fee'},
         ],
+        'set_plot_order': [0, 6, 1, 5, 3, 4, 2, 7],
         'y_display_scale': 10**9,
         'loc_in_manager': 'recent_blocks'
     },
@@ -133,6 +135,7 @@ mode_params = {
                 'x': 'block_number',
                 'y': 'lowest_nonzero_fee'},
                 ],
+            'set_plot_order': [0, 1, 2],
             'y_display_scale': 1,
             'loc_in_manager': 'recent_blocks'
         },
@@ -162,6 +165,7 @@ mode_params = {
                 'x': 'block_number',
                 'y': 'base_fee'},
             ],
+            'set_plot_order': [0, 1, 2],
             'y_display_scale': 10**9,
             'loc_in_manager': 'recent_blocks'
         },
@@ -185,6 +189,7 @@ mode_params = {
                 'x': 'block_number',
                 'y': 'cumulative_burn'},
             ],
+            'set_plot_order': [1, 0],
             'y_display_scale': 10**6,
             'loc_in_manager': 'recent_blocks'
         }
@@ -224,6 +229,7 @@ def parse_block(block, mode):
     transactions = get_transactions_from_block(block, mode)
     single_block['transactions'] = transactions
     return single_block
+
 
 def infer_priority_fee(transaction, base_fee):
     # Get priority fee equivalent for all tx types, even legacy.
@@ -652,7 +658,6 @@ class Positions:
 
     def get_fixed(self, sc, win):
         self.h, self.w = sc.getmaxyx()
-
         self.y_axis_tip = (self.border, self.border)
         self.y_axis_height = self.h - (2 * self.border) + 1
         self.x_axis_base = (self.h-self.border, self.border)
@@ -661,7 +666,6 @@ class Positions:
 
 def draw_axes(win, pos, mode):
     # Creates and labels graph axes.
-
     [
         win.addstr(pos.border + i, pos.w - pos.border - 3 - \
                 len(set['set_name']),
@@ -808,8 +812,9 @@ def draw_points(win, pos, mode):
     min_xy_max_xy = get_min_xy_max_xy(mode)
     draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip)
     [
-        plot_set(win, pos, set, points_to_skip, min_xy_max_xy)
-        for set in mode.data
+        plot_set(win, pos, mode.data[i], points_to_skip, 
+            min_xy_max_xy)
+        for i in mode.params['set_plot_order']
     ]
 
 
