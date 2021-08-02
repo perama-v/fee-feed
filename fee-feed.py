@@ -572,6 +572,9 @@ class BlockDataManager:
     def get_missing_blocks(self, newest_aware_of, modes):
         # Maintenance data management. Refreshes recent block list.
         # Assesses if block data needs are met, retrieves if needed.
+        # Will only get a subset if there is a large range missing.
+        max_update = oldest_block_depth  # Can limit update size.
+
         oldest_needed = newest_aware_of - self.range_required
         needed = [i for i in range(oldest_needed,
             newest_aware_of)]
@@ -592,6 +595,8 @@ class BlockDataManager:
             block_num for block_num in needed
             if not block_num in have_block_nums
         ]
+        if len(missing_numbers) > max_update:
+            missing_numbers = missing_numbers[-max_update:]
         if len(missing_numbers) > 0:
             retrieved = get_blocks(missing_numbers, mode=None)
             [
@@ -689,7 +694,7 @@ class Interval:
     # Determines if it is the right time to get data.
     def __init__(self):
         self.sec_since_call = 0
-        delay_ms = 800  # Delay after first window display.
+        delay_ms = 400  # Delay after first window display.
         self.time_msec_after_start = int(time.time()*1000) + delay_ms
         self.time = int(time.time())
         self.ready_to_call_block = False
