@@ -174,7 +174,7 @@ mode_params = {
             'button': '5',
             'graph_title': 'Ether burned for recent blocks',
             'x_axis_name': 'Block number',
-            'y_axis_name': 'picoether burned',
+            'y_axis_name': 'nanoether burned',
             'oldest_required': oldest_block_depth,
             'block_stats': ['block_burn', 'cumulative_burn'],
             'sets_to_graph': [
@@ -190,7 +190,7 @@ mode_params = {
                 'y': 'cumulative_burn'},
             ],
             'set_plot_order': [1, 0],
-            'y_display_scale': 10**6,
+            'y_display_scale': 10**9,
             'loc_in_manager': 'recent_blocks'
         }
 }
@@ -653,7 +653,7 @@ class Interval:
 class Positions:
     # Coordinates of elements, in "(y, x)" where paired.
     def __init__(self, sc, win):
-        self.border = 4
+        self.border = 5
         self.get_fixed(sc, win)
 
     def get_fixed(self, sc, win):
@@ -774,9 +774,9 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     for i in range(n):
         y_height = pos.y_axis_tip[0] + i * pos.y_axis_height // n
         y_val = str((n-i) * min_xy_max_xy[3] // n // yscale)
-        win.addstr(y_height, pos.y_axis_tip[1] - 3, y_val)
+        win.addstr(y_height, 1, y_val)
     # Draw y minimum
-    win.addstr(pos.x_axis_base[0] - 1, pos.x_axis_base[1] - 3,
+    win.addstr(pos.x_axis_base[0] - 1, 1,
         str(int(min_xy_max_xy[1] / yscale)))
 
     # Move the max axis if the axis is not fully filled.
@@ -850,7 +850,7 @@ def draw_graph(sc, win, mode, data_manager):
         return
     offer_modes(win, pos, mode, data_manager)
     if mode.data is None or len(mode.data[0]['x_list']) == 0:
-        msg = f'Block {mode.current_block} is empty'
+        msg = f'Node syncing or block {mode.current_block} is empty'
         win.addstr(pos.h // 2, pos.w // 2 - len(msg) // 2, msg)
         return
 
