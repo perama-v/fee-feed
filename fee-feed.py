@@ -15,9 +15,9 @@ load_dotenv()
 node = os.environ.get('RPC_URL')
 
 ModeNames = Enum('Modes', 'LATEST_FEES BOXPLOT BOXPLOT_NO_OUTLIERS \
-FULLNESS SPREAD BURN')
+FULLNESS BASE BURN MEDIAN_PRIORITY MAX_RATIO MIN_PRIORITY')
 mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'),
-    ord('5'), ord('6')]
+    ord('5'), ord('6'), ord('7'), ord('8'), ord('9')]
 price_string = 'nanoether per gas (Gwei per gas)'
 oldest_block_depth = 200
 mode_params = {
@@ -182,33 +182,22 @@ mode_params = {
             'y_display_scale': 1,
             'loc_in_manager': 'recent_blocks'
         },
-    ModeNames.SPREAD: {
+    ModeNames.BASE: {
             'mode_key': mode_keys[4],
             'button': '5',
-            'graph_title': 'Fee spread and other measures',
+            'graph_title': 'The base fee',
             'x_axis_name': 'Block number',
             'y_axis_name': 'Scalar value (see legend)',
             'oldest_required': oldest_block_depth,
-            'block_stats': ['priority_std',
-                'average_max_multiple', 'base_fee'],
+            'block_stats': ['base_fee'],
             'sets_to_graph': [
-                {'name': 'Priority standard deviation',
-                'symbol': 'σ',
-                'loc_for_set': 'statistics',
-                'x': 'block_number',
-                'y': 'priority_std'},
-                {'name': 'Average max fee / basefee',
-                'symbol': '×',
-                'loc_for_set': 'statistics',
-                'x': 'block_number',
-                'y': 'average_max_multiple'},
                 {'name': 'Base fee',
                 'symbol': '≡',
                 'loc_for_set': 'statistics',
                 'x': 'block_number',
                 'y': 'base_fee'},
             ],
-            'set_plot_order': [0, 1, 2],
+            'set_plot_order': [0],
             'y_display_scale': 10**9,
             'loc_in_manager': 'recent_blocks'
         },
@@ -233,9 +222,73 @@ mode_params = {
                 'y': 'cumulative_burn'},
             ],
             'set_plot_order': [1, 0],
-            'y_display_scale': 10**9,
+            'y_display_scale': 10**18,
             'loc_in_manager': 'recent_blocks'
-        }
+        },
+ModeNames.MEDIAN_PRIORITY: {
+        'mode_key': mode_keys[6],
+        'button': '7',
+        'graph_title': 'Recent priority fee median',
+        'x_axis_name': 'Block number',
+        'y_axis_name': price_string,
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['base_fee','Q2'],
+        'transaction_params': ['gasPrice','maxFeePerGas',
+            'maxPriorityFeePerGas'],
+        'sets_to_graph': [
+            {'name': 'med',
+            'symbol': '▓',
+            'x': 'block_number',
+            'loc_for_set': 'statistics',
+            'y': 'Q2'},
+            {'name': 'Base fee',
+            'symbol': '≡',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'base_fee'},
+        ],
+        'set_plot_order': [0, 1],
+        'y_display_scale': 10**9,
+        'loc_in_manager': 'recent_blocks'
+    },
+ModeNames.MAX_RATIO: {
+        'mode_key': mode_keys[7],
+        'button': '8',
+        'graph_title': 'What max priority fee relative to base fee',
+        'x_axis_name': 'Block number',
+        'y_axis_name': 'Scalar value (see legend)',
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['average_max_multiple'],
+        'sets_to_graph': [
+            {'name': 'Average max fee / basefee',
+            'symbol': '×',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'average_max_multiple'}
+        ],
+        'set_plot_order': [0],
+        'y_display_scale': 1,
+        'loc_in_manager': 'recent_blocks'
+    },
+ModeNames.MIN_PRIORITY: {
+        'mode_key': mode_keys[8],
+        'button': '9',
+        'graph_title': 'Smallest non-zero priority fee',
+        'x_axis_name': 'Block number',
+        'y_axis_name': price_string,
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['lowest_nonzero_fee'],
+        'sets_to_graph': [
+            {'name': 'lowest nonzero fee (nanoether)',
+            'symbol': '╩',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'lowest_nonzero_fee'},
+            ],
+        'set_plot_order': [0],
+        'y_display_scale': 1,
+        'loc_in_manager': 'recent_blocks'
+    }
 }
 
 # Maintains the sequence of JSON-RPC API calls.
@@ -383,7 +436,7 @@ def calculate_average_max_multiple(block, fees, result):
     multiple = 0
     if 'baseFeePerGas' in block.keys():
         mean = statistics.mean(fees)
-        multiple = int(mean / int(block['baseFeePerGas'], 16))
+        multiple = int(100 * mean / int(block['baseFeePerGas'], 16))
     result['average_max_multiple'] = multiple
     return result
 

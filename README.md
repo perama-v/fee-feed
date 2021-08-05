@@ -44,6 +44,10 @@ Run
 
     python fee-feed.py
 
+On startup, details of transactions in the first block will be displayed.
+After the display is started, the receipts of the last 200 blocks
+are fetched, which can take a minute for a local node.
+
 Control with the keyboard:
 
 - number to change mode
