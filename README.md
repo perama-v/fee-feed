@@ -44,12 +44,21 @@ Run
 
     python fee-feed.py
 
+On startup, details of transactions in the first block will be displayed.
+After the display is started, the receipts of the last 200 blocks
+are fetched, which can take a minute for a local node.
+
 Control with the keyboard:
 
 - number to change mode
 - q to quit.
 
 ### Stats
+
+See boxplots with outliers removed
+
+Mainnet:
+![img](/img/mainnet_14.png)
 
 Standard deviation of the priority fees.
 

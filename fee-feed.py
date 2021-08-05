@@ -14,8 +14,10 @@ load_dotenv()
 # Change this to the address of your node.
 node = os.environ.get('RPC_URL')
 
-ModeNames = Enum('Modes', 'LATEST_FEES BASE_FEE FULLNESS SPREAD BURN')
-mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'), ord('5')]
+ModeNames = Enum('Modes', 'LATEST_FEES BOXPLOT BOXPLOT_NO_OUTLIERS \
+FULLNESS BASE BURN MEDIAN_PRIORITY MAX_RATIO MIN_PRIORITY')
+mode_keys = [ord('1'), ord('2'), ord('3'), ord('4'),
+    ord('5'), ord('6'), ord('7'), ord('8'), ord('9')]
 price_string = 'nanoether per gas (Gwei per gas)'
 oldest_block_depth = 200
 mode_params = {
@@ -52,7 +54,7 @@ mode_params = {
         'y_display_scale': 10**9,
         'loc_in_manager': 'latest_block_transactions'
     },
-    ModeNames.BASE_FEE: {
+    ModeNames.BOXPLOT: {
         'mode_key': mode_keys[1],
         'button': '2',
         'graph_title': 'Recent priority fees',
@@ -109,9 +111,50 @@ mode_params = {
         'y_display_scale': 10**9,
         'loc_in_manager': 'recent_blocks'
     },
+    ModeNames.BOXPLOT_NO_OUTLIERS: {
+        'mode_key': mode_keys[2],
+        'button': '3',
+        'graph_title': 'Recent priority fees - No outliers',
+        'x_axis_name': 'Block number',
+        'y_axis_name': price_string,
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['Q4','Q3','Q2','Q1','Q0'],
+        'transaction_params': ['maxFeePerGas',
+            'maxPriorityFeePerGas'],
+        'sets_to_graph': [
+            {'name': 'Q4 ',
+            'symbol': '┬',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q4'},
+            {'name': 'Q3 ',
+            'symbol': '▓',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q3'},
+            {'name': 'med',
+            'symbol': '▓',
+            'x': 'block_number',
+            'loc_for_set': 'statistics',
+            'y': 'Q2'},
+            {'name': 'Q1 ',
+            'symbol': '▓',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q1'},
+            {'name': 'Q0 ',
+            'symbol': '┴',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'Q0'}
+        ],
+        'set_plot_order': [0, 4, 2, 3, 1],
+        'y_display_scale': 10**9,
+        'loc_in_manager': 'recent_blocks'
+    },
     ModeNames.FULLNESS: {
-            'mode_key': mode_keys[2],
-            'button': '3',
+            'mode_key': mode_keys[3],
+            'button': '4',
             'graph_title': 'Block utilisation and other measures',
             'x_axis_name': 'Block number',
             'y_axis_name': 'Scalar value (see legend)',
@@ -139,39 +182,28 @@ mode_params = {
             'y_display_scale': 1,
             'loc_in_manager': 'recent_blocks'
         },
-    ModeNames.SPREAD: {
-            'mode_key': mode_keys[3],
-            'button': '4',
-            'graph_title': 'Fee spread and other measures',
+    ModeNames.BASE: {
+            'mode_key': mode_keys[4],
+            'button': '5',
+            'graph_title': 'The base fee',
             'x_axis_name': 'Block number',
             'y_axis_name': 'Scalar value (see legend)',
             'oldest_required': oldest_block_depth,
-            'block_stats': ['priority_std',
-                'average_max_multiple', 'base_fee'],
+            'block_stats': ['base_fee'],
             'sets_to_graph': [
-                {'name': 'Priority standard deviation',
-                'symbol': 'σ',
-                'loc_for_set': 'statistics',
-                'x': 'block_number',
-                'y': 'priority_std'},
-                {'name': 'Average max fee / basefee',
-                'symbol': '×',
-                'loc_for_set': 'statistics',
-                'x': 'block_number',
-                'y': 'average_max_multiple'},
                 {'name': 'Base fee',
                 'symbol': '≡',
                 'loc_for_set': 'statistics',
                 'x': 'block_number',
                 'y': 'base_fee'},
             ],
-            'set_plot_order': [0, 1, 2],
+            'set_plot_order': [0],
             'y_display_scale': 10**9,
             'loc_in_manager': 'recent_blocks'
         },
     ModeNames.BURN: {
-            'mode_key': mode_keys[4],
-            'button': '5',
+            'mode_key': mode_keys[5],
+            'button': '6',
             'graph_title': 'Ether burned for recent blocks',
             'x_axis_name': 'Block number',
             'y_axis_name': 'nanoether burned',
@@ -190,9 +222,73 @@ mode_params = {
                 'y': 'cumulative_burn'},
             ],
             'set_plot_order': [1, 0],
-            'y_display_scale': 10**9,
+            'y_display_scale': 10**18,
             'loc_in_manager': 'recent_blocks'
-        }
+        },
+ModeNames.MEDIAN_PRIORITY: {
+        'mode_key': mode_keys[6],
+        'button': '7',
+        'graph_title': 'Recent priority fee median',
+        'x_axis_name': 'Block number',
+        'y_axis_name': price_string,
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['base_fee','Q2'],
+        'transaction_params': ['gasPrice','maxFeePerGas',
+            'maxPriorityFeePerGas'],
+        'sets_to_graph': [
+            {'name': 'med',
+            'symbol': '▓',
+            'x': 'block_number',
+            'loc_for_set': 'statistics',
+            'y': 'Q2'},
+            {'name': 'Base fee',
+            'symbol': '≡',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'base_fee'},
+        ],
+        'set_plot_order': [0, 1],
+        'y_display_scale': 10**9,
+        'loc_in_manager': 'recent_blocks'
+    },
+ModeNames.MAX_RATIO: {
+        'mode_key': mode_keys[7],
+        'button': '8',
+        'graph_title': 'What max priority fee relative to base fee',
+        'x_axis_name': 'Block number',
+        'y_axis_name': 'Scalar value (see legend)',
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['average_max_multiple'],
+        'sets_to_graph': [
+            {'name': 'Average max fee / basefee',
+            'symbol': '×',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'average_max_multiple'}
+        ],
+        'set_plot_order': [0],
+        'y_display_scale': 1,
+        'loc_in_manager': 'recent_blocks'
+    },
+ModeNames.MIN_PRIORITY: {
+        'mode_key': mode_keys[8],
+        'button': '9',
+        'graph_title': 'Smallest non-zero priority fee',
+        'x_axis_name': 'Block number',
+        'y_axis_name': price_string,
+        'oldest_required': oldest_block_depth,
+        'block_stats': ['lowest_nonzero_fee'],
+        'sets_to_graph': [
+            {'name': 'lowest nonzero fee (nanoether)',
+            'symbol': '╩',
+            'loc_for_set': 'statistics',
+            'x': 'block_number',
+            'y': 'lowest_nonzero_fee'},
+            ],
+        'set_plot_order': [0],
+        'y_display_scale': 1,
+        'loc_in_manager': 'recent_blocks'
+    }
 }
 
 # Maintains the sequence of JSON-RPC API calls.
@@ -245,21 +341,19 @@ def infer_priority_fee(transaction, base_fee):
 
 def calculate_priority_boxplot(block, with_inferred_priority, result):
     # Generates values used for box plot, adds to result.
-    # Sort tx list by inferred priority fee:
+    # Sort tx list by inferred priority fee.
+    # TODO consider excluding zero priority fee transactions.
     tx_by_fee = sorted(with_inferred_priority,
         key = lambda tx: tx['inferred_priority'])
 
     # Make a list of accumulating gas.
-    gas_limit_vals = [
-        int(tx['gas'], 16)
+    tx_gas_used = [
+        int(tx['gasUsed'], 16)
         for tx in with_inferred_priority
     ]
-    gas_clock = list(accumulate(gas_limit_vals))
+    gas_clock = list(accumulate(tx_gas_used))
     block_gas = int(block['gasUsed'], 16)
     result['block_gas'] = block_gas
-    # Get fee percentiles by gas limit (rather than index).
-    # TODO (maybe - might be slow.) change this to gas used by
-    # calling eth_getTransactionReceipt for each transaction
     percentiles = {
         'min': 0,
         'Q1': 25,
@@ -342,7 +436,7 @@ def calculate_average_max_multiple(block, fees, result):
     multiple = 0
     if 'baseFeePerGas' in block.keys():
         mean = statistics.mean(fees)
-        multiple = int(mean / int(block['baseFeePerGas'], 16))
+        multiple = int(100 * mean / int(block['baseFeePerGas'], 16))
     result['average_max_multiple'] = multiple
     return result
 
@@ -392,6 +486,29 @@ def block_analysis(block):
     return result
 
 
+def get_receipts(block):
+    # Accepts a block from getBlockByNumber
+    # Updates the transactions to include receipt data.
+    transactions = block['transactions']
+    if len(transactions) == 0:
+        return block
+    batch = [
+        {
+            "jsonrpc": "2.0",
+            "id": next(block_call_ids),
+            "method": "eth_getTransactionReceipt",
+            "params": [f"{t['hash']}"],
+        }
+        for t in transactions
+    ]
+    responses = requests.post(node, json=batch).json()
+    for index, res in enumerate(responses):
+        for key, val in res['result'].items():
+            transactions[index][key] = val
+    block['transactions'] = transactions
+    return block
+     
+
 def get_blocks(blocks, mode=None):
     # Calls a node and asks for blocks in chunks.
 
@@ -405,16 +522,19 @@ def get_blocks(blocks, mode=None):
         for block in blocks
     ]
     responses = requests.post(node, json=batch).json()
-
+    blocks_with_receipts = [
+        get_receipts(res["result"])
+        for res in responses
+    ]
     if mode is None:
         return [
-            block_analysis(res["result"])
-            for res in responses
+            block_analysis(block)
+            for block in blocks_with_receipts
             ]
     else:
         return [
-            parse_block(res["result"], mode)
-            for res in responses
+            parse_block(block, mode)
+            for block in blocks_with_receipts
             ]
 
 
@@ -505,6 +625,9 @@ class BlockDataManager:
     def get_missing_blocks(self, newest_aware_of, modes):
         # Maintenance data management. Refreshes recent block list.
         # Assesses if block data needs are met, retrieves if needed.
+        # Will only get a subset if there is a large range missing.
+        max_update = oldest_block_depth  # Can limit update size.
+
         oldest_needed = newest_aware_of - self.range_required
         needed = [i for i in range(oldest_needed,
             newest_aware_of)]
@@ -525,6 +648,8 @@ class BlockDataManager:
             block_num for block_num in needed
             if not block_num in have_block_nums
         ]
+        if len(missing_numbers) > max_update:
+            missing_numbers = missing_numbers[-max_update:]
         if len(missing_numbers) > 0:
             retrieved = get_blocks(missing_numbers, mode=None)
             [
@@ -622,7 +747,7 @@ class Interval:
     # Determines if it is the right time to get data.
     def __init__(self):
         self.sec_since_call = 0
-        delay_ms = 200  # Delay after first window display.
+        delay_ms = 400  # Delay after first window display.
         self.time_msec_after_start = int(time.time()*1000) + delay_ms
         self.time = int(time.time())
         self.ready_to_call_block = False
