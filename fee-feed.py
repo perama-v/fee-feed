@@ -254,7 +254,7 @@ ModeNames.MEDIAN_PRIORITY: {
 ModeNames.MAX_RATIO: {
         'mode_key': mode_keys[7],
         'button': '8',
-        'graph_title': 'What max priority fee relative to base fee',
+        'graph_title': 'Max priority fee (average) as percentage of base fee',
         'x_axis_name': 'Block number',
         'y_axis_name': 'Scalar value (see legend)',
         'oldest_required': oldest_block_depth,
