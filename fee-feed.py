@@ -32,7 +32,8 @@ mode_params = {
             'baseFeePerGas'],
         'get_transactions': True,
         'transaction_params': ['type','gasPrice','transactionIndex',
-            'maxFeePerGas','maxPriorityFeePerGas'],
+            'maxFeePerGas','maxPriorityFeePerGas',
+            'baseFeePerGas', 'effectiveFeePerGas'],
         'sets_to_graph': [
             {'name': 'maxPriorityFeePerGas',
             'symbol': '°',
@@ -48,9 +49,19 @@ mode_params = {
             'symbol': '╦',
             'loc_for_set': 'transactions',
             'x': 'transactionIndex',
-            'y': 'gasPrice'}
+            'y': 'gasPrice'},
+            {'name': 'effectiveFeePerGas (priority + base)',
+            'symbol': '+',
+            'loc_for_set': 'transactions',
+            'x': 'transactionIndex',
+            'y': 'effectiveFeePerGas'},
+            {'name': 'Base fee',
+            'symbol': '≡',
+            'loc_for_set': 'transactions',
+            'x': 'transactionIndex',
+            'y': 'baseFeePerGas'}
         ],
-        'set_plot_order': [0, 1, 2],
+        'set_plot_order': [0, 1, 2, 3],
         'y_display_scale': 10**9,
         'loc_in_manager': 'latest_block_transactions'
     },
@@ -315,6 +326,16 @@ def get_transactions_from_block(block, mode):
     return transactions
 
 
+def get_effective_fee(tx, base):
+    # Accepts a transaction and adds an effective fee
+    # if type 0x2. Effective = priority + base.
+    effective = None
+    if tx['type'] == 2:
+        effective = base + tx['maxPriorityFeePerGas']
+    tx['effectiveFeePerGas'] = effective
+    return tx
+
+
 def parse_block(block, mode):
     # Retrieves only the relevant data for a mode.
     # If a desired field is absent, key will have 'None' value.
@@ -322,7 +343,12 @@ def parse_block(block, mode):
         key: hex_to_int(block.get(key))
         for key in mode.params['block_data']
     }
-    transactions = get_transactions_from_block(block, mode)
+    block_tx = get_transactions_from_block(block, mode)
+    base_fee = int(block['baseFeePerGas'],16)
+    transactions = [
+        get_effective_fee(tx, base_fee)
+        for tx in block_tx
+    ]
     single_block['transactions'] = transactions
     return single_block
 
