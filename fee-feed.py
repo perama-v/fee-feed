@@ -61,7 +61,7 @@ mode_params = {
             'x': 'transactionIndex',
             'y': 'baseFeePerGas'}
         ],
-        'set_plot_order': [0, 1, 2, 3],
+        'set_plot_order': [4, 3, 0, 1, 2],
         'y_display_scale': 10**9,
         'loc_in_manager': 'latest_block_transactions'
     },
@@ -333,6 +333,7 @@ def get_effective_fee(tx, base):
     if tx['type'] == 2:
         effective = base + tx['maxPriorityFeePerGas']
     tx['effectiveFeePerGas'] = effective
+    tx['baseFeePerGas'] = base
     return tx
 
 
@@ -483,6 +484,9 @@ def block_analysis(block):
     result = {}
     if len(block['transactions']) == 0:
         return None
+    result['hash'] = block['hash']
+    result['miner'] = block['miner']
+    result['extraData'] = block['extraData']
 
     # Get base fee.
     base_fee = 0
@@ -773,7 +777,7 @@ class Interval:
     # Determines if it is the right time to get data.
     def __init__(self):
         self.sec_since_call = 0
-        delay_ms = 400  # Delay after first window display.
+        delay_ms = 2000  # Delay after first window display.
         self.time_msec_after_start = int(time.time()*1000) + delay_ms
         self.time = int(time.time())
         self.ready_to_call_block = False
