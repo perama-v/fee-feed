@@ -118,13 +118,6 @@ names and button.
 2. Add a function to populate your newly named data. Search for
 "# Add new data functions here."
 
-## Issues
-
-The boxplots are calculated on quartiles for maxPriorityFeePerGas,
-weighted by gas - but the gas value is gas limit, rather than
-gas used for that transaction. The prices are correct, but the
-distribution might be off compared with feeHistory API results.
-
 ## Disclaimer
 
 This is provided as-is for education purposes and should not be used as critical infrastructure.
