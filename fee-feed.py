@@ -926,9 +926,11 @@ def draw_scales(win, pos, mode, min_xy_max_xy, points_to_skip):
     # Add y values to axes, high to low.
     n = 4  # number of notches to display y values at.
     yscale = mode.params['y_display_scale']
+    y_min = min_xy_max_xy[1]
+    y_range = min_xy_max_xy[3] - y_min
     for i in range(n):
         y_height = pos.y_axis_tip[0] + i * pos.y_axis_height // n
-        y_val = str((n-i) * min_xy_max_xy[3] // n // yscale)
+        y_val = str((y_min + (n-i) * y_range // n) // yscale)
         win.addstr(y_height, 1, y_val)
     # Draw y minimum
     win.addstr(pos.x_axis_base[0] - 1, 1,
